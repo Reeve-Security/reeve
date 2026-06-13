@@ -1,0 +1,75 @@
+---
+- name: Install Reeve endpoint scan
+  hosts: all
+  become: true
+  vars:
+    reeve_bin: /usr/local/bin/aibom-cli
+    reeve_scan_dir: /var/lib/reeve/scans
+    reeve_config_dir: /etc/reeve
+  tasks:
+    - name: Create Reeve directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - /usr/local/bin
+        - "{{ reeve_config_dir }}"
+        - "{{ reeve_scan_dir }}"
+
+    - name: Install Reeve binary
+      ansible.builtin.get_url:
+        url: "{{ reeve_binary_url }}"
+        dest: "{{ reeve_bin }}"
+        mode: "0755"
+
+    - name: Install signed surface config
+      ansible.builtin.get_url:
+        url: "{{ reeve_surface_config_url }}"
+        dest: "{{ reeve_config_dir }}/surfaces.yaml"
+        mode: "0644"
+
+    - name: Install surface config signature bundle
+      ansible.builtin.get_url:
+        url: "{{ reeve_surface_config_bundle_url }}"
+        dest: "{{ reeve_config_dir }}/surfaces.yaml.sigstore.json"
+        mode: "0644"
+
+    - name: Install systemd service
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/reeve-scan.service
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Reeve endpoint scan
+
+          [Service]
+          Type=oneshot
+          ExecStart={{ reeve_bin }} scan --target /home --output-dir {{ reeve_scan_dir }} --require-signed-config --signer-identity-regexp {{ reeve_signer_identity_regexp }} --skip-sign
+
+    - name: Install systemd timer
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/reeve-scan.timer
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Run Reeve endpoint scan daily
+
+          [Timer]
+          OnCalendar=*-*-* 02:17:00
+          Persistent=true
+
+          [Install]
+          WantedBy=timers.target
+
+    - name: Enable timer
+      ansible.builtin.systemd:
+        name: reeve-scan.timer
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Verify signed config is accepted
+      ansible.builtin.command:
+        cmd: "{{ reeve_bin }} scope list --require-signed-config --signer-identity-regexp {{ reeve_signer_identity_regexp }}"
+      changed_when: false

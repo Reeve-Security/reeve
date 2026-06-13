@@ -1,0 +1,14 @@
+{
+  "name": "05-subprocess",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "exec:subprocess capability with cmd (basename only per schema-rule) and argCount qualifiers. Component is a pypi-hosted MCP server, exercising non-npm ecosystem in the purl.",
+  "invariants": [
+    "Q1.a", "Q1.b",
+    "Q2.e", "Q2.f",
+    "Q3.h",
+    "Q4.n", "Q4.o", "Q4.p", "Q4.q", "Q4.r", "Q4.s", "Q4.t", "Q4.u",
+    "Q5.w", "Q5.x", "Q5.ad", "Q5.ae", "Q5.af"
+  ],
+  "notes": "schema-rule requires cmd to carry basename only — 'git', not '/usr/bin/git' or 'git status'. The full argv is recorded in the sandbox evidence record, not in the capability. Qualifier keys in JCS-canonical order: argCount before cmd (lex). Policy #7 (no-exec-or-subprocess-without-capability) evaluates 'allow' here because observed matches declared."
+}

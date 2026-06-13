@@ -1,0 +1,13 @@
+{
+  "name": "38-policy-02-publisher-allowlist-deny",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "Policy fixture: verified signature subject is outside configured publisher allowlist. Policy #2 emits deny.",
+  "invariants": [
+    "Q1.a",
+    "Q2.e",
+    "Q3.h",
+    "Q5.ad"
+  ],
+  "notes": "Claimed CycloneDX publisher is intentionally not trusted as publisher evidence."
+}

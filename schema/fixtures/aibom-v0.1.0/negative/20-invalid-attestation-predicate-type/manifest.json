@@ -1,0 +1,11 @@
+{
+  "name": "20-invalid-attestation-predicate-type",
+  "kind": "negative",
+  "expected": "verify-reject",
+  "rejectStage": "attestation-shape",
+  "expectedErrorCode": "attestation.predicateType_mismatch",
+  "rejectPointer": "/dsseEnvelope/payload[decoded]/predicateType",
+  "invariants": ["Q4.v"],
+  "description": "The in-toto Statement inside the DSSE envelope declares predicateType `https://slsa.dev/provenance/v1` (a valid SLSA Provenance v1 identifier) instead of the AIBOM predicateType URI. Verifier rejects at attestation-shape stage per schema-rule fail-closed mode 5.",
+  "notes": "This fixture simulates cross-predicate replay: an attacker presents a validly-signed SLSA provenance statement where an AIBOM attestation is expected. Defense requires the verifier to check predicateType equality exactly against the AIBOM URI for the schema version being verified; payloadType check alone (application/vnd.in-toto+json) does not distinguish AIBOM from SLSA or any other in-toto predicate. Sister fixtures in this series: 21 (wrong subject count) and 22 (wrong digest algorithm)."
+}

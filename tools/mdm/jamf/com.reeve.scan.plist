@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.reeve.scan</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/aibom-cli</string>
+    <string>scan</string>
+    <string>--target</string>
+    <string>/Users</string>
+    <string>--output-dir</string>
+    <string>/var/db/reeve/scans</string>
+    <string>--require-signed-config</string>
+    <string>--signer-identity-regexp</string>
+    <string>REPLACE_WITH_SIGNER_IDENTITY_REGEXP</string>
+    <string>--skip-sign</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>2</integer>
+    <key>Minute</key>
+    <integer>17</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/var/log/reeve-scan.log</string>
+  <key>StandardErrorPath</key>
+  <string>/var/log/reeve-scan.err</string>
+</dict>
+</plist>

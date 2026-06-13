@@ -1,0 +1,1 @@
+{"$schema":"https://aibom.example/schemas/secret-rule-pack-v0.1.0.json","rulePackId":"acme-conversation-secrets","rules":[{"confidence":"high","description":"Missing pack version must fail schema validation.","patternClass":"acme-internal-token","regex":"ACMESECRET[A-Z0-9]{8}","ruleId":"acme.internal-token"}]}

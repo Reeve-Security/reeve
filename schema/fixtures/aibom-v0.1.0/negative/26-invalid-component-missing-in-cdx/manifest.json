@@ -1,0 +1,11 @@
+{
+  "name": "26-invalid-component-missing-in-cdx",
+  "kind": "negative",
+  "expected": "schema-reject",
+  "rejectStage": "semantic-validation",
+  "expectedErrorCode": "aibom.component.bom_ref_missing_in_cdx",
+  "rejectPointer": "/aibom/components/0/bom-ref",
+  "invariants": ["Q1.d"],
+  "description": "Sidecar declares bom-ref `pkg:pypi/mcp-server-git@0.5.0` but the companion CDX lists only `pkg:npm/@modelcontextprotocol/server-filesystem@2.3.1`. Cross-file defect: every sidecar component bom-ref must correspond to a CDX component bom-ref per schema-rule.",
+  "notes": "This closes the sidecar↔CDX binding. Without the check, a malicious or buggy emitter could attach AIBOM evidence to a component identity the CDX never vouched for — effectively injecting unprovenanced capability claims."
+}

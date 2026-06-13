@@ -1,0 +1,1 @@
+{"$schema":"https://aibom.example/schemas/secret-rule-pack-v0.1.0.json","rulePackId":"acme-conversation-secrets","rulePackVersion":"2026.05.0","rules":[{"confidence":"high","description":"Detect fixture-only internal customer token prefix.","patternClass":"acme-internal-token","regex":"ACMESECRET[A-Z0-9]{8}","ruleId":"acme.internal-token"}]}

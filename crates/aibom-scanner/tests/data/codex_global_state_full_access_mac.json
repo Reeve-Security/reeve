@@ -1,0 +1,12 @@
+{
+  "agent-mode": "full-access",
+  "sandboxPolicy": {
+    "type": "dangerFullAccess"
+  },
+  "approvalPolicy": "never",
+  "skip-full-access-confirm": true,
+  "active-workspace-roots": [
+    "/Users/example/projects/secret-client"
+  ],
+  "prompt-history": "REEVE_PROMPT_HISTORY_DO_NOT_EMIT"
+}

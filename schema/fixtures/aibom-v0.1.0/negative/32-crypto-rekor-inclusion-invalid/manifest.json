@@ -1,0 +1,12 @@
+{
+  "name": "32-crypto-rekor-inclusion-invalid",
+  "kind": "negative",
+  "description": "Rekor inclusion proof fails log-root verification",
+  "expected": "verify-reject",
+  "rejectStage": "crypto-verification",
+  "expectedErrorCode": "crypto.rekor_inclusion_invalid",
+  "rejectPointer": "/verificationMaterial",
+  "invariants": [
+    "Q4.crypto"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "12-invalid-single-label-extension",
+  "kind": "negative",
+  "expected": "schema-reject",
+  "rejectStage": "schema-validation",
+  "expectedErrorCode": "capability.id.namespace_reserved",
+  "rejectPointer": "/aibom/components/0/capabilities/declared/0/id",
+  "invariants": ["Q5.ab"],
+  "description": "Capability id `openai:tool:call` uses a single-label namespace (`openai:`) that is not in the v0.1 adapter registry. Schema rejects per schema-rule: single-label namespaces outside the registry (mcp is the only one in v0.1) are reserved and invalid until formally registered.",
+  "notes": "Prevents emitter squatting on high-value short-form namespaces like openai:, langchain:, docker:. A vendor needing this capability today must use reverse-DNS (com.openai.mcp:tool:call, com.vendor.openai:tool:call)."
+}

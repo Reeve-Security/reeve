@@ -1,0 +1,14 @@
+{
+  "name": "07-mcp-extension",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "Valid AIBOM triplet exercising the registered `mcp` adapter namespace with two extension capability ids (mcp:resource:expose, mcp:tool:call) and freeform qualifiers.",
+  "invariants": [
+    "Q1.a", "Q1.b",
+    "Q2.e", "Q2.f", "Q2.g",
+    "Q3.h", "Q3.i",
+    "Q4.n", "Q4.o", "Q4.p", "Q4.q", "Q4.r", "Q4.s", "Q4.t", "Q4.u",
+    "Q5.y", "Q5.ad", "Q5.ae", "Q5.af"
+  ],
+  "notes": "Demonstrates the registered-adapter-namespace grammar from schema-rule. Qualifier keys (resource_uri_pattern, tool_name) are freeform under the mcp namespace — schema does not enforce them. Extension capabilities do not contribute to delta findings; Policy #11 (no-unknown-extension-capability) evaluates 'allowed' for mcp: entries when mcp is in the consumer's extension-namespace allowlist (default in v0.1)."
+}

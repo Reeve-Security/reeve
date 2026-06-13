@@ -1,0 +1,9 @@
+{
+  "mcp": {
+    "servers": {
+      "browser": {
+        "url": "http://localhost:8123/sse"
+      }
+    }
+  }
+}

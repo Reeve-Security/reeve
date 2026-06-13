@@ -1,0 +1,46 @@
+{
+  "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+  "verificationMaterial": {
+    "_fixture_note": "placeholder; real Fulcio cert + Rekor v2 proof generated via cosign keyless in build-order step 4",
+    "certificate": {
+      "rawBytes": "FIXTURE_PLACEHOLDER_CERT_BYTES"
+    },
+    "tlogEntries": [
+      {
+        "_fixture_note": "placeholder Rekor v2 dsse entry",
+        "logIndex": "0",
+        "logId": {
+          "keyId": "FIXTURE_PLACEHOLDER"
+        },
+        "kindVersion": {
+          "kind": "dsse",
+          "version": "0.0.1"
+        },
+        "integratedTime": "1745193600",
+        "inclusionPromise": {
+          "signedEntryTimestamp": "FIXTURE_PLACEHOLDER"
+        },
+        "inclusionProof": {
+          "_fixture_note": "placeholder inclusion proof",
+          "checkpoint": {
+            "envelope": "FIXTURE_PLACEHOLDER"
+          },
+          "hashes": [],
+          "logIndex": "0",
+          "rootHash": "FIXTURE_PLACEHOLDER",
+          "treeSize": "0"
+        }
+      }
+    ]
+  },
+  "dsseEnvelope": {
+    "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJwcmVkaWNhdGUiOnsiYXJ0aWZhY3RSb2xlcyI6eyJmaXh0dXJlLTM3LmFpYm9tLmpzb24iOiJhaWJvbS1zaWRlY2FyIiwiZml4dHVyZS0zNy5jZHguanNvbiI6ImN5Y2xvbmVkeCJ9LCJjYW5vbmljYWxpemF0aW9uIjoiUkZDODc4NS1KQ1MrYWlib20tYXJyYXktb3JkZXItdjAuMSIsInNjaGVtYVZlcnNpb24iOiIwLjEuMCJ9LCJwcmVkaWNhdGVUeXBlIjoiaHR0cHM6Ly9haWJvbS5leGFtcGxlL2F0dGVzdGF0aW9uL2FpYm9tL3YwLjEiLCJzdWJqZWN0IjpbeyJkaWdlc3QiOnsic2hhMjU2IjoiYzA4YmIwZjM3YmFlYTRkZTFjYjU0NjExYzJlNWI5MDI1YjU0NjdlOTI0YWNmN2NiYzg5M2JhMzZhMmFjMzFlNyJ9LCJuYW1lIjoiZml4dHVyZS0zNy5haWJvbS5qc29uIn0seyJkaWdlc3QiOnsic2hhMjU2IjoiNmE5MGE3Y2JhN2RhZmRkZTY0OWYyZTI5ZDNiNmY0MTVhMjljZTlkMmJkZWY3NGFmNjdlNjIxMDRlOWRmNTBmMyJ9LCJuYW1lIjoiZml4dHVyZS0zNy5jZHguanNvbiJ9XX0=",
+    "payloadType": "application/vnd.in-toto+json",
+    "signatures": [
+      {
+        "_fixture_note": "placeholder signature",
+        "sig": "FIXTURE_PLACEHOLDER_SIGNATURE"
+      }
+    ]
+  }
+}

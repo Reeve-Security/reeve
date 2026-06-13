@@ -1,0 +1,14 @@
+{
+  "name": "02-network-egress-match",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "Declared and observed both contain net:egress to api.example.com:443/https; delta is empty. Exercises the core net:egress id and its full qualifier set (host, port, scheme).",
+  "invariants": [
+    "Q1.a", "Q1.b",
+    "Q2.e", "Q2.f",
+    "Q3.h",
+    "Q4.n", "Q4.o", "Q4.p", "Q4.q", "Q4.r", "Q4.s", "Q4.t", "Q4.u",
+    "Q5.w", "Q5.x", "Q5.ad", "Q5.ae", "Q5.af"
+  ],
+  "notes": "Policy-input proof that 'declared matches observed' is a legitimate no-delta outcome, not a missing-data condition."
+}

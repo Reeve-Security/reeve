@@ -1,0 +1,14 @@
+{
+  "name": "03-undeclared-egress-delta",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "Declared contains net:egress to api.example.com; observed contains that entry plus net:egress to api.untrusted.example. Delta (observed − declared) is non-empty: api.untrusted.example is undeclared. This is the silent-capability-creep detector's canonical case.",
+  "invariants": [
+    "Q1.a", "Q1.b",
+    "Q2.e", "Q2.f",
+    "Q3.h", "Q3.i",
+    "Q4.n", "Q4.o", "Q4.p", "Q4.q", "Q4.r", "Q4.s", "Q4.t", "Q4.u",
+    "Q5.w", "Q5.x", "Q5.ad", "Q5.ae", "Q5.af"
+  ],
+  "notes": "Per schema-rule, delta is derived not stored. Consumers compute it by set-difference on (id, qualifiers) over the core namespace. Policy #6 (no-undeclared-egress) would fire deny on this fixture's delta. Observed array ordering: two entries share id=net:egress; tiebreaker is JCS(qualifiers), which sorts api.example.com before api.untrusted.example (e < u in the host value)."
+}

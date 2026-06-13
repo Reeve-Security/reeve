@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "antigravity-local": {
+      "command": "npx",
+      "args": ["-y", "@antigravity/local-mcp@0.1.0"]
+    }
+  }
+}

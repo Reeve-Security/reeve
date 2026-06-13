@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "fetch": {
+      "command": "uvx",
+      "args": ["mcp-server-fetch"]
+    }
+  },
+  "preferences": {
+    "localAgentModeTrustedFolders": [
+      "/Users/testuser/LegalDocs",
+      "relative/path/ignored"
+    ]
+  }
+}

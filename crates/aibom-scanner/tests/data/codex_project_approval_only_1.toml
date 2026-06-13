@@ -1,0 +1,4 @@
+[projects."/workspaces/acme"]
+trust_level = "trusted"
+approval_policy = "never"
+sandbox_mode = "workspace-write"

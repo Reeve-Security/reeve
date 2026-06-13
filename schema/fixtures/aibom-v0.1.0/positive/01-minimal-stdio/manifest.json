@@ -1,0 +1,14 @@
+{
+  "name": "01-minimal-stdio",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "Smallest valid AIBOM triplet: one MCP stdio component, one declared + one observed capability (fs:read) with empty qualifiers, no delta. Exercises baseline sidecar+CDX+bundle structure end-to-end.",
+  "invariants": [
+    "Q1.a", "Q1.b", "Q1.c", "Q1.d",
+    "Q2.e", "Q2.f", "Q2.g",
+    "Q3.h",
+    "Q4.n", "Q4.o", "Q4.p", "Q4.q", "Q4.r", "Q4.s", "Q4.t", "Q4.u",
+    "Q5.w", "Q5.x", "Q5.ad", "Q5.ae", "Q5.af"
+  ],
+  "notes": "Template fixture. All other positive fixtures follow this structure, varying the capability payload, component count, and qualifier content. Evidence-record shape (top-level aibom.evidence[] with {id, kind, reference}) is provisional — proposed for formalization in a future schema-rule on the evidence-record ledger; see Review Questions in schema/fixtures/README.md."
+}

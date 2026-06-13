@@ -1,0 +1,87 @@
+{
+  "advisories": [
+    {
+      "id": "OSV-2026-LEFTPAD",
+      "aliases": [
+        "CVE-2026-0001"
+      ],
+      "summary": "left-pad 1.2.3 has a demonstrator vulnerability",
+      "affected": [
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "left-pad"
+          },
+          "versions": [
+            "1.2.3"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "OSV-2026-RANGE-ONLY",
+      "summary": "range-only advisory now matches introduced/fixed boundaries",
+      "affected": [
+        {
+          "package": {
+            "ecosystem": "pypi",
+            "name": "requests"
+          },
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {
+                  "introduced": "0"
+                },
+                {
+                  "fixed": "2.31.1"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "OSV-2026-RANGE-FIXED-BOUNDARY",
+      "summary": "fixed boundary stays exclusive for the bounded range slice",
+      "affected": [
+        {
+          "package": {
+            "ecosystem": "pypi",
+            "name": "requests"
+          },
+          "ranges": [
+            {
+              "type": "ECOSYSTEM",
+              "events": [
+                {
+                  "introduced": "0"
+                },
+                {
+                  "fixed": "2.31.0"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "OSV-2026-OTHER",
+      "summary": "unrelated package should not match",
+      "affected": [
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "chalk"
+          },
+          "versions": [
+            "5.0.0"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+[features]
+plugins = true
+
+[marketplaces.openai-bundled]
+last_updated = "2026-05-17T23:21:33Z"
+source_type = "local"
+source = "C:\\Users\\testuser\\.codex\\.tmp\\bundled-marketplaces\\openai-bundled"
+
+[marketplaces.corp-share]
+last_updated = "2026-05-17T23:21:33Z"
+source_type = "local"
+source = "\\\\corp-share\\codex\\plugins"
+
+[plugins."browser@openai-bundled"]
+enabled = true
+
+[plugins."computer-use@openai-bundled"]
+enabled = true
+
+[plugins."presentations@openai-primary-runtime"]
+enabled = true
+
+[plugins."corp-plugin@corp-share"]
+enabled = true
+
+[projects."C:\\Users\\testuser\\projects\\secret-client-work"]
+trust_level = "trusted"

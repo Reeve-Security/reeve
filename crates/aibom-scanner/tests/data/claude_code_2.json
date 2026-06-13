@@ -1,0 +1,12 @@
+{
+  "projects": {
+    "default": {
+      "mcpServers": {
+        "memory": {
+          "command": "pipx",
+          "args": ["run", "mcp-memory"]
+        }
+      }
+    }
+  }
+}

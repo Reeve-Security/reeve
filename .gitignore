@@ -1,0 +1,64 @@
+# Rust build artifacts
+/target
+**/*.rs.bk
+
+# Cargo.lock is committed for binary crates and excluded for libraries;
+# revisit once the workspace is populated.
+
+# IDE / editor
+.claude/
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Logs and test output
+*.log
+/coverage
+/test-results
+/tmp
+
+# Python cache artifacts
+__pycache__/
+*.py[cod]
+
+# Founder-private working area - never committed.
+# Anything under /private/ stays local. Use for plans, customer notes,
+# and any other internal content that should not appear in the public repo.
+/private/
+
+# WASM build output
+*.wasm
+!crates/aibom-policy/bundles/*.wasm
+
+# Local environment
+.env
+.env.local
+.envrc
+
+# Local agent operating files
+AGENTS.md
+CLAUDE.md
+.manager-worktrees/
+
+# Local scan artifacts and operator state
+*.aibom.json
+!schema/fixtures/aibom-v0.1.0/**/*.aibom.json
+!schema/fixtures/aibom-v0.2.0/**/*.aibom.json
+!schema/fixtures/aibom-v0.3.0/**/*.aibom.json
+*.cdx.json
+!schema/fixtures/aibom-v0.1.0/**/*.cdx.json
+!schema/fixtures/aibom-v0.2.0/**/*.cdx.json
+!schema/fixtures/aibom-v0.3.0/**/*.cdx.json
+*.sigstore.json
+!schema/fixtures/aibom-v0.1.0/**/*.sigstore.json
+!schema/fixtures/aibom-v0.2.0/**/*.sigstore.json
+!schema/fixtures/aibom-v0.3.0/**/*.sigstore.json
+*.tfstate
+*.tfstate.*
+inventory.yml

@@ -1,0 +1,36 @@
+{
+  "extensions": [
+    {
+      "id": "ant.dir.gh.wonderwhy-er.desktopcommandermcp",
+      "name": "Desktop Commander",
+      "version": "0.2.8",
+      "signatureInfo": {
+        "status": "unsigned"
+      },
+      "server": {
+        "type": "node",
+        "command": "node",
+        "args": [
+          "${__dirname}/dist/index.js"
+        ]
+      },
+      "tools": [
+        {
+          "name": "read_file"
+        },
+        {
+          "name": "write_file"
+        },
+        {
+          "name": "start_process"
+        },
+        {
+          "name": "kill_process"
+        },
+        {
+          "name": "edit_block"
+        }
+      ]
+    }
+  ]
+}

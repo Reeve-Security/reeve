@@ -1,0 +1,13 @@
+{
+  "name": "40-policy-08-trusted-package-source-deny",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "Policy fixture: prefix-spoofed PURL type pkg:npm-malicious is not trusted by a pkg:npm source allowlist. Policy #8 emits deny.",
+  "invariants": [
+    "Q1.a",
+    "Q2.e",
+    "Q3.h",
+    "Q5.ad"
+  ],
+  "notes": "Policy compares normalized PURL source prefixes and avoids prefix-spoof matches."
+}

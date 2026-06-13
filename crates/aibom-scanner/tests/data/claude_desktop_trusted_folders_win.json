@@ -1,0 +1,9 @@
+{
+  "preferences": {
+    "localAgentModeTrustedFolders": [
+      "C:\\Users\\testuser\\LegalDocs",
+      "\\\\fileserver\\team\\MatterRoom",
+      "relative\\path\\ignored"
+    ]
+  }
+}

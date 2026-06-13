@@ -1,0 +1,30 @@
+{
+  "emailAddress": "secret@example.com",
+  "cwd": "C:\\Users\\example\\private",
+  "permissionMode": "default",
+  "enabledMcpTools": [
+    "desktop-commander.read_file"
+  ],
+  "userSelectedFolders": [
+    "C:\\Users\\example\\LegalDocs"
+  ],
+  "egressAllowedDomains": [
+    {
+      "host": "api.windows.example",
+      "scheme": "https"
+    }
+  ],
+  "orgCliExecPolicies": {
+    "*": true,
+    "ignored": false
+  },
+  "remoteMcpServersConfig": [
+    {
+      "name": "Windows EXA",
+      "uuid": "0f2c71c8-524e-43c7-b9c1-33afad4cc901",
+      "tools": [
+        {"name": "web_search_exa"}
+      ]
+    }
+  ]
+}

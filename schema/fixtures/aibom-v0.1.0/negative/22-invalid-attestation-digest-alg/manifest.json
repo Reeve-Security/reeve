@@ -1,0 +1,11 @@
+{
+  "name": "22-invalid-attestation-digest-alg",
+  "kind": "negative",
+  "expected": "verify-reject",
+  "rejectStage": "attestation-shape",
+  "expectedErrorCode": "attestation.digest_algorithm",
+  "rejectPointer": "/dsseEnvelope/payload[decoded]/subject/0/digest",
+  "invariants": ["Q4.v"],
+  "description": "The in-toto Statement's subject digests use sha512 instead of sha256. Per schema-rule structural invariants (fail-closed mode 5), v0.1 requires sha256 exclusively for all subject digests. Other algorithms are rejected until a future schema version adds them.",
+  "notes": "The sha512 values ARE real digests of the companion artifacts (computed by sha512sum on the same bytes), not fabricated — the defect is the algorithm choice, not the digest values. Keeping sha256 as the only accepted algorithm in v0.1 prevents algorithm-substitution attacks where an attacker downgrades to a weaker algorithm, or mixes algorithms across subjects in ways verifiers might not catch. sha256 is cryptographically strong enough for v0.1 artifact identity; sha384/sha512 add algorithmic diversity as a v1.x consideration."
+}

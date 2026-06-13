@@ -1,0 +1,118 @@
+{
+  "kind": "reeve-mcp-registry-seed",
+  "schemaVersion": "0.1.0",
+  "source": {
+    "kind": "official-mcp-registry",
+    "url": "https://registry.modelcontextprotocol.io/v0.1/servers",
+    "apiVersion": "v0.1",
+    "termsUrl": "https://modelcontextprotocol.io/registry/terms-of-service",
+    "inputSha256": "fixture"
+  },
+  "dedupe": {
+    "keyFields": [
+      "sourceRegistry",
+      "canonicalIdentity.name",
+      "canonicalIdentity.version"
+    ],
+    "format": "official-mcp-registry|<name>|<version>"
+  },
+  "summary": {
+    "sourceRecords": 3,
+    "records": 3,
+    "activeRecords": 3,
+    "latestRecords": 2
+  },
+  "records": [
+    {
+      "id": "official-mcp-registry:acme/demo@1.0.0",
+      "dedupeKey": "official-mcp-registry|acme/demo|1.0.0",
+      "sourceRegistry": "official-mcp-registry",
+      "sourceUrl": "https://registry.modelcontextprotocol.io/v0.1/servers",
+      "canonicalIdentity": {
+        "name": "acme/demo",
+        "publisher": "acme",
+        "packageName": "demo",
+        "version": "1.0.0"
+      },
+      "title": "Acme Demo",
+      "description": "Demo server with a vulnerable dependency",
+      "declaredMetadata": {
+        "packages": [
+          {
+            "registryType": "npm",
+            "identifier": "left-pad",
+            "version": "1.2.3"
+          },
+          {
+            "registryType": "pypi",
+            "identifier": "requests",
+            "version": "2.31.0"
+          }
+        ]
+      },
+      "registryMetadata": {
+        "status": "active",
+        "isLatest": false
+      }
+    },
+    {
+      "id": "official-mcp-registry:acme/demo@1.0.1",
+      "dedupeKey": "official-mcp-registry|acme/demo|1.0.1",
+      "sourceRegistry": "official-mcp-registry",
+      "sourceUrl": "https://registry.modelcontextprotocol.io/v0.1/servers",
+      "canonicalIdentity": {
+        "name": "acme/demo",
+        "publisher": "acme",
+        "packageName": "demo",
+        "version": "1.0.1"
+      },
+      "title": "Acme Demo",
+      "description": "Demo server after the dependency fix",
+      "declaredMetadata": {
+        "packages": [
+          {
+            "registryType": "npm",
+            "identifier": "left-pad",
+            "version": "1.2.4"
+          },
+          {
+            "registryType": "pypi",
+            "identifier": "requests",
+            "version": "2.31.0"
+          }
+        ]
+      },
+      "registryMetadata": {
+        "status": "active",
+        "isLatest": true
+      }
+    },
+    {
+      "id": "official-mcp-registry:example/clean@2.0.0",
+      "dedupeKey": "official-mcp-registry|example/clean|2.0.0",
+      "sourceRegistry": "official-mcp-registry",
+      "sourceUrl": "https://registry.modelcontextprotocol.io/v0.1/servers",
+      "canonicalIdentity": {
+        "name": "example/clean",
+        "publisher": "example",
+        "packageName": "clean",
+        "version": "2.0.0"
+      },
+      "title": "Example Clean",
+      "description": "Unrelated server with clean package metadata",
+      "declaredMetadata": {
+        "packages": [
+          {
+            "registryType": "pypi",
+            "identifier": "click",
+            "version": "8.1.7"
+          }
+        ]
+      },
+      "registryMetadata": {
+        "status": "active",
+        "isLatest": true
+      }
+    }
+  ]
+}

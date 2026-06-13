@@ -1,0 +1,41 @@
+(version 1)
+(import "system.sb")
+
+; Reeve MCP profiler. Default deny; log denied actions for observed-capability evidence.
+(deny default)
+(debug deny)
+
+; Let sandboxed stdio server read its package/interpreter/runtime files.
+(allow file-read*
+__ALLOWED_READ_RULES__
+  (literal "/dev/null")
+  (literal "/dev/random")
+  (literal "/dev/urandom")
+  (literal "__EXECUTABLE__"))
+
+; system.sb and the runtime allow-list give startup baseline access. Re-deny
+; common sensitive paths after those allows so profiler still captures them as
+; observed file access.
+(deny file-read*
+  (literal "/etc/passwd")
+  (literal "/private/etc/passwd")
+  (literal "/private/etc/master.passwd"))
+
+; Dedicated profiler tempdir is the only writable filesystem area.
+(allow file-read* (subpath "__TEMPDIR__"))
+(allow file-write* (subpath "__TEMPDIR__"))
+
+; Initial server executable is allowed. Later subprocess exec attempts remain denied
+; unless they target the same executable path or symlink-resolved realpath.
+(allow process-exec
+__EXECUTABLE_RULES__)
+
+; Basic runtime queries needed by language runtimes on macOS.
+(allow sysctl-read)
+(allow mach-lookup)
+(allow signal (target self))
+
+; Deliberately absent:
+; - network* allow rules: all egress/listen attempts deny+log.
+; - broad process* allow rules: subprocess launches deny+log.
+; - broad file-write* rules: writes outside tempdir deny+log.

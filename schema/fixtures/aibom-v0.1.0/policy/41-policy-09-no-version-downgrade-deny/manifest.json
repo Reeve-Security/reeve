@@ -1,0 +1,13 @@
+{
+  "name": "41-policy-09-no-version-downgrade-deny",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "Policy fixture: current package version is below configured minimum version floor. Policy #9 emits deny.",
+  "invariants": [
+    "Q1.a",
+    "Q2.e",
+    "Q3.h",
+    "Q5.ad"
+  ],
+  "notes": "Minimum-version key omits version segment from the PURL so historical state remains stable across scans."
+}

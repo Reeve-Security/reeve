@@ -1,0 +1,46 @@
+{
+  "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+  "verificationMaterial": {
+    "_fixture_note": "placeholder; real Fulcio cert + Rekor v2 proof generated via cosign keyless in build-order step 4",
+    "certificate": {
+      "rawBytes": "FIXTURE_PLACEHOLDER_CERT_BYTES"
+    },
+    "tlogEntries": [
+      {
+        "_fixture_note": "placeholder Rekor v2 dsse entry",
+        "logIndex": "0",
+        "logId": {
+          "keyId": "FIXTURE_PLACEHOLDER"
+        },
+        "kindVersion": {
+          "kind": "dsse",
+          "version": "0.0.1"
+        },
+        "integratedTime": "1745193600",
+        "inclusionPromise": {
+          "signedEntryTimestamp": "FIXTURE_PLACEHOLDER"
+        },
+        "inclusionProof": {
+          "_fixture_note": "placeholder inclusion proof",
+          "checkpoint": {
+            "envelope": "FIXTURE_PLACEHOLDER"
+          },
+          "hashes": [],
+          "logIndex": "0",
+          "rootHash": "FIXTURE_PLACEHOLDER",
+          "treeSize": "0"
+        }
+      }
+    ]
+  },
+  "dsseEnvelope": {
+    "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJwcmVkaWNhdGUiOnsiYXJ0aWZhY3RSb2xlcyI6eyJmaXh0dXJlLTIwLmFpYm9tLmpzb24iOiJhaWJvbS1zaWRlY2FyIiwiZml4dHVyZS0yMC5jZHguanNvbiI6ImN5Y2xvbmVkeCJ9LCJjYW5vbmljYWxpemF0aW9uIjoiUkZDODc4NS1KQ1MrYWlib20tYXJyYXktb3JkZXItdjAuMSIsInNjaGVtYVZlcnNpb24iOiIwLjEuMCJ9LCJwcmVkaWNhdGVUeXBlIjoiaHR0cHM6Ly9zbHNhLmRldi9wcm92ZW5hbmNlL3YxIiwic3ViamVjdCI6W3siZGlnZXN0Ijp7InNoYTI1NiI6ImE5ZjE2MzU2ZTRiMGRlMzIyOGI4ZDM2NjNmODYzZWExN2FlYjQzOWExNTJmNmY1MmU2NzdhMjM3YWI4MzcxODUifSwibmFtZSI6ImZpeHR1cmUtMjAuYWlib20uanNvbiJ9LHsiZGlnZXN0Ijp7InNoYTI1NiI6IjhhNDEyZGExNzhmOWVkNzEzMmNlYjcwNTU1ZDEzOWU3OGI0ZWQzOTBlOGUyMmNjNzBlZDBmNzIyNGJkMjJjY2EifSwibmFtZSI6ImZpeHR1cmUtMjAuY2R4Lmpzb24ifV19",
+    "payloadType": "application/vnd.in-toto+json",
+    "signatures": [
+      {
+        "_fixture_note": "placeholder signature",
+        "sig": "FIXTURE_PLACEHOLDER_SIGNATURE"
+      }
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+[mcp_servers.local_api]
+url = "http://127.0.0.1:9999/sse"
+
+[projects."/"]
+trust_level = "trusted"
+approval_policy = "never"
+sandbox_mode = "danger-full-access"

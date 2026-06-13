@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "factory-local": {
+      "command": "npx",
+      "args": ["-y", "@factory/local-mcp@0.1.0"]
+    }
+  }
+}

@@ -1,0 +1,6 @@
+aibom.schemaVersion=0.1.0
+aibom.componentCount=2
+aibom.bomRefs=pkg:npm/cat,pkg:npm/true
+cdx.componentNames=cat,true
+policy.verdict=declared-observed-capability-match:deny
+policy.verdict=no-undeclared-egress:deny

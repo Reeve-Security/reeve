@@ -1,0 +1,13 @@
+{
+  "name": "36-policy-03-rule-b-warn",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "Policy fixture: declarations are only mcp:* stubs but observed core behavior includes exec:subprocess. Policy #3 Rule B emits warn.",
+  "invariants": [
+    "Q1.a",
+    "Q2.e",
+    "Q3.h",
+    "Q5.ad"
+  ],
+  "notes": "Models launch-playwright-mcp style stub declarations versus concrete observed behavior."
+}

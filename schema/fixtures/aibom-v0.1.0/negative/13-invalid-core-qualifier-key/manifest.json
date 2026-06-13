@@ -1,0 +1,11 @@
+{
+  "name": "13-invalid-core-qualifier-key",
+  "kind": "negative",
+  "expected": "schema-reject",
+  "rejectStage": "schema-validation",
+  "expectedErrorCode": "capability.qualifiers.key_not_in_allowed_set",
+  "rejectPointer": "/aibom/components/0/capabilities/declared/0/qualifiers/path",
+  "invariants": ["Q5.ac"],
+  "description": "Capability id `net:egress` has qualifier key `path` which is not in its allowed set. Per schema-rule, net:egress accepts only host, port, scheme.",
+  "notes": "Qualifier key validation is per-core-id closed. Extension-namespace qualifiers are freeform and would not trigger this rejection. This test ensures schema validators enforce the allowed-set table from schema-rule, not just pass any keys through."
+}

@@ -1,0 +1,11 @@
+{
+  "name": "24-invalid-evidence-id-duplicate",
+  "kind": "negative",
+  "expected": "schema-reject",
+  "rejectStage": "semantic-validation",
+  "expectedErrorCode": "aibom.evidence.id_duplicate",
+  "rejectPointer": "/aibom/evidence/1/id",
+  "invariants": ["Q1.d"],
+  "description": "Two entries in aibom.evidence[] share the same id. Harness rejects at semantic-validation.",
+  "notes": "Evidence ids are the primary key of the evidence ledger; capability.evidence[] and policyVerdict.evidence[] reference ledger entries by id. Duplicate ids break referential integrity. JSON Schema cannot enforce uniqueness on a sub-field across array items in Draft 2020-12 without bespoke extensions, so this is a harness check."
+}

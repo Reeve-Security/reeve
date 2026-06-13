@@ -1,0 +1,20 @@
+{
+  "emailAddress": "secret@example.com",
+  "permissionMode": "default",
+  "enabledMcpTools": {
+    "desktop-commander.delete_file": false
+  },
+  "userSelectedFolders": [
+    "relative/project"
+  ],
+  "egressAllowedDomains": [],
+  "orgCliExecPolicies": [
+    {
+      "command": "rm -rf /",
+      "approved": false
+    }
+  ],
+  "chromePermsBeforeUnsupervised": {
+    "debugger": true
+  }
+}

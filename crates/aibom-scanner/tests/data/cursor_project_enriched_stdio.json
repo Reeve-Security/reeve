@@ -1,0 +1,9 @@
+{
+  "serverIdentifier": "project-shell",
+  "serverName": "project-shell",
+  "command": "node",
+  "args": ["/opt/cursor/projects/alpha/mcps/project-shell/index.js"],
+  "env": {
+    "NODE_ENV": "production"
+  }
+}

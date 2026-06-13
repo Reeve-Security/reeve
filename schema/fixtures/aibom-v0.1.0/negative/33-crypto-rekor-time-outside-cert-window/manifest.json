@@ -1,0 +1,12 @@
+{
+  "name": "33-crypto-rekor-time-outside-cert-window",
+  "kind": "negative",
+  "description": "Rekor integrated time is outside certificate validity window",
+  "expected": "verify-reject",
+  "rejectStage": "crypto-verification",
+  "expectedErrorCode": "crypto.rekor_time_outside_cert_window",
+  "rejectPointer": "/verificationMaterial",
+  "invariants": [
+    "Q4.crypto"
+  ]
+}

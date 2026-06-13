@@ -1,0 +1,13 @@
+{
+  "emailAddress": "secret@example.com",
+  "cwd": "/Users/example/private",
+  "remoteMcpServersConfig": [
+    {
+      "name": "EXA.ai",
+      "uuid": "e786afac-3991-4dc4-8334-68fdbf06aa9e",
+      "tools": [
+        {"name": "web_search_exa"}
+      ]
+    }
+  ]
+}

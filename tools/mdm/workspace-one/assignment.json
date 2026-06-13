@@ -1,0 +1,8 @@
+{
+  "name": "Reeve endpoint scan",
+  "installCommand": "REEVE_BINARY_URL=https://example.invalid/aibom-cli REEVE_SURFACE_CONFIG_URL=https://example.invalid/surfaces.yaml REEVE_SURFACE_CONFIG_BUNDLE_URL=https://example.invalid/surfaces.yaml.sigstore.json REEVE_SIGNER_IDENTITY_REGEXP='^repo:mycorp/reeve-config:.*$' ./install.sh",
+  "detection": {
+    "type": "file-exists",
+    "path": "/usr/local/bin/aibom-cli"
+  }
+}

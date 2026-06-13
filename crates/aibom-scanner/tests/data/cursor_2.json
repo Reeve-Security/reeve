@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "repo": {
+      "command": "node",
+      "args": ["/opt/mcp/repo-server.js"]
+    }
+  }
+}

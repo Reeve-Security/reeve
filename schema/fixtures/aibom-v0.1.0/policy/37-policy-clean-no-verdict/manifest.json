@@ -1,0 +1,13 @@
+{
+  "name": "37-policy-clean-no-verdict",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "Policy fixture: declared and observed core capabilities match exactly. Post-policy sidecar carries empty policyVerdicts array.",
+  "invariants": [
+    "Q1.a",
+    "Q2.e",
+    "Q3.h",
+    "Q5.ad"
+  ],
+  "notes": "Clean case for policy-engine golden coverage."
+}

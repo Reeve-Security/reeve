@@ -1,0 +1,11 @@
+{
+  "name": "21-invalid-attestation-subject-count",
+  "kind": "negative",
+  "expected": "verify-reject",
+  "rejectStage": "attestation-shape",
+  "expectedErrorCode": "attestation.subject_count",
+  "rejectPointer": "/dsseEnvelope/payload[decoded]/subject",
+  "invariants": ["Q4.v"],
+  "description": "The in-toto Statement inside the DSSE envelope has three subjects instead of exactly two. Per schema-rule structural invariants (fail-closed mode 5), subject[] MUST contain exactly two entries: one aibom-sidecar, one cyclonedx.",
+  "notes": "Three-subject attempts are one of the class of Statement-shape attacks schema-rule prevents. The aibom.json and cdx.json are valid and pass their prior stages; the defect is purely at attestation-shape. The extra subject (fixture-21.extra.json with a placeholder digest) could represent an attacker attempting to inject a third artifact into a legitimately-signed scan, or a malformed emitter bug. Either way, verification must fail."
+}

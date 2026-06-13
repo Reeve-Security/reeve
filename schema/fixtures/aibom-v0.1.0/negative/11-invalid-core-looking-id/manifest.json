@@ -1,0 +1,11 @@
+{
+  "name": "11-invalid-core-looking-id",
+  "kind": "negative",
+  "expected": "schema-reject",
+  "rejectStage": "schema-validation",
+  "expectedErrorCode": "capability.id.core_unregistered",
+  "rejectPointer": "/aibom/components/0/capabilities/declared/0/id",
+  "invariants": ["Q5.aa"],
+  "description": "Capability id `fs:chmod` has a single-label namespace (`fs:`) that matches the core-looking grammar but is not in the v0.1 core registry. Schema rejects at validation per schema-rule.",
+  "notes": "This is the silent-core-expansion prevention test. The `fs:` namespace is reserved for schema-registered core ids; emitters that need chmod-like semantics today must use a reverse-DNS extension namespace (e.g., `com.emitter.project:chmod`) until chmod is formally added to the core registry in a future schema version."
+}

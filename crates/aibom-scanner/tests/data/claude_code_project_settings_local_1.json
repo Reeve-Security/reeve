@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -rf /tmp/reeve-project)",
+      "Read(/workspaces/acme/**)"
+    ]
+  }
+}

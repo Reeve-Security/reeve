@@ -1,0 +1,14 @@
+{
+  "name": "09-multi-component-one-sidecar",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "Single scan with two MCP components (npm @modelcontextprotocol/server-filesystem + pypi mcp-server-git), one shared AIBOM sidecar document that carries per-component capability sets, both components referencing the same sidecar via externalReferences.",
+  "invariants": [
+    "Q1.a", "Q1.b", "Q1.c", "Q1.d",
+    "Q2.e", "Q2.f",
+    "Q3.h", "Q3.i", "Q3.j",
+    "Q4.n", "Q4.o", "Q4.p", "Q4.q", "Q4.r", "Q4.s", "Q4.t", "Q4.u",
+    "Q5.w", "Q5.x", "Q5.ad", "Q5.ae", "Q5.af"
+  ],
+  "notes": "Proves schema-rule's one-sidecar-per-scan commitment. Components[] in both the CDX and the sidecar are sorted lex by bom-ref: pkg:npm/... < pkg:pypi/... (n < p). Attestation subject[] is also sorted lex by name: fixture-09.aibom.json < fixture-09.cdx.json (a < c). Component-level anchors inside the sidecar map evidence back to CycloneDX bom-ref values; each component's capabilities block is self-contained."
+}

@@ -1,0 +1,14 @@
+{
+  "name": "02-invalid-relative-windows-path",
+  "kind": "negative",
+  "expected": "schema-reject",
+  "rejectStage": "schema-validation",
+  "expectedErrorCode": "capability.qualifiers.path_invalid",
+  "rejectPointer": "/aibom/components/0/capabilities/declared/0/qualifiers/path",
+  "description": "v0.3.0 negative fixture: Windows-looking filesystem path qualifier is relative, not drive-absolute or UNC-absolute.",
+  "invariants": [
+    "schema-rule.a",
+    "schema-rule.c"
+  ],
+  "schemaVersion": "0.3.0"
+}

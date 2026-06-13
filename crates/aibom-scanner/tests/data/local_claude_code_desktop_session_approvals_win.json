@@ -1,0 +1,23 @@
+{
+  "emailAddress": "desktop-secret@example.com",
+  "cwd": "C:\\Users\\example\\private",
+  "sessionType": "interactive",
+  "scheduledTaskId": "weekly-report",
+  "permissionMode": "bypassPermissions",
+  "enabledMcpTools": [
+    "desktop-commander.read_file"
+  ],
+  "alwaysAllowedReasons": [
+    {
+      "tool": "filesystem.write_file",
+      "approvalMode": "always"
+    }
+  ],
+  "sessionPermissionUpdates": {
+    "shell.run": true,
+    "shell.delete": false
+  },
+  "userSelectedFolders": [
+    "C:\\Users\\example\\LegalDocs"
+  ]
+}

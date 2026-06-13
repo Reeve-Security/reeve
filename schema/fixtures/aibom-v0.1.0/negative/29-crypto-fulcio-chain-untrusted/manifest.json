@@ -1,0 +1,12 @@
+{
+  "name": "29-crypto-fulcio-chain-untrusted",
+  "kind": "negative",
+  "description": "self-signed/placeholder certificate does not chain to Fulcio root",
+  "expected": "verify-reject",
+  "rejectStage": "crypto-verification",
+  "expectedErrorCode": "crypto.fulcio_chain_untrusted",
+  "rejectPointer": "/verificationMaterial",
+  "invariants": [
+    "Q4.crypto"
+  ]
+}

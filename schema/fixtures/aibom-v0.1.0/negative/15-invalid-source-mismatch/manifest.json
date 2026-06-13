@@ -1,0 +1,11 @@
+{
+  "name": "15-invalid-source-mismatch",
+  "kind": "negative",
+  "expected": "schema-reject",
+  "rejectStage": "schema-validation",
+  "expectedErrorCode": "capability.source.array_mismatch",
+  "rejectPointer": "/aibom/components/0/capabilities/declared/0/source",
+  "invariants": ["Q5.ae"],
+  "description": "Entry in capabilities.declared[] has source: \"observed\". Per schema-rule, schema enforces: every entry in declared[] has source=\"declared\", every entry in observed[] has source=\"observed\". Mismatch rejects.",
+  "notes": "The source field is redundant with array containment but kept for Rego ergonomics when policies flatten capabilities. Schema-enforced consistency ensures the two representations never drift."
+}

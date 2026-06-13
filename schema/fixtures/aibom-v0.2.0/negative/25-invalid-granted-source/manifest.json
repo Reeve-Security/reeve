@@ -1,0 +1,13 @@
+{
+  "name": "25-invalid-granted-source",
+  "kind": "negative",
+  "expected": "schema-reject",
+  "rejectStage": "schema-validation",
+  "expectedErrorCode": "capability.source.array_mismatch",
+  "rejectPointer": "/aibom/components/0/capabilities/declared/0/source",
+  "description": "v0.2.0 negative fixture: 'granted' capability source placed in the 'declared' array. Per schema-rule, each capability array enforces source const: declared array requires source='declared', observed array requires source='observed', granted array requires source='granted'.",
+  "invariants": [
+    "schema-rule.c"
+  ],
+  "schemaVersion": "0.2.0"
+}
