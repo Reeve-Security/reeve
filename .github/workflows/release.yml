@@ -229,7 +229,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     # Keep artifact builds on Blacksmith, but publish from GitHub-hosted Linux.
     # This job is small and needs reliable OIDC/release upload availability.
-    runs-on: "ubuntu-latest"
+    runs-on: "blacksmith-4vcpu-ubuntu-2404"
     permissions:
       "contents": "write"
       "id-token": "write"
