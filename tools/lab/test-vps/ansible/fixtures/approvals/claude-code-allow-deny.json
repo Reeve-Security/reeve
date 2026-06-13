@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "claude-lab-shell": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-shell"]
+    }
+  },
+  "permissions": {
+    "allow": [
+      "Read(/workspace/**)",
+      "Bash(cargo test:*)",
+      "Bash(rm -rf:*)"
+    ],
+    "deny": [
+      "Read(/etc/shadow)",
+      "Bash(curl * | sh)"
+    ]
+  }
+}

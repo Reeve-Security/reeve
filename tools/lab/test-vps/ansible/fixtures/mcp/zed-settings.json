@@ -1,0 +1,8 @@
+{
+  "context_servers": {
+    "zed-notebooks": {
+      "command": "uvx",
+      "args": ["notebook-mcp"]
+    }
+  }
+}

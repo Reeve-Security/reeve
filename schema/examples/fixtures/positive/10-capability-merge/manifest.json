@@ -1,0 +1,14 @@
+{
+  "name": "10-capability-merge",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "Post-merge form: the observed array contains a single net:egress entry whose evidence[] holds two evidence record refs (ev-002, ev-003), representing two sandbox observations of the same capability collapsed per the ADR-0005 merging rule.",
+  "invariants": [
+    "Q1.a", "Q1.b",
+    "Q2.e", "Q2.f",
+    "Q3.h", "Q3.i",
+    "Q4.n", "Q4.o", "Q4.p", "Q4.q", "Q4.r", "Q4.s", "Q4.t", "Q4.u",
+    "Q5.w", "Q5.x", "Q5.ag", "Q5.ad", "Q5.ae", "Q5.af"
+  ],
+  "notes": "The merging rule requires emitters to collapse (id, qualifiers) duplicates within a single array at emit time, not defer collapsing to consumers. Evidence ref order within the merged array is lexicographic (ev-002, ev-003). Both observations see the same host/port/scheme tuple, so they collapse; if any qualifier differed (e.g., different port), they would remain two distinct entries. Confidence field absent per v0.1 deferral; if re-added as evidenceConfidence, the merge rule would take max of contributing confidences."
+}

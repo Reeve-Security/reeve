@@ -1,0 +1,12 @@
+{
+  "name": "31-crypto-oidc-subject-not-allowed",
+  "kind": "negative",
+  "description": "OIDC subject claim is outside publisher allowlist",
+  "expected": "verify-reject",
+  "rejectStage": "crypto-verification",
+  "expectedErrorCode": "crypto.oidc_subject_not_allowed",
+  "rejectPointer": "/verificationMaterial",
+  "invariants": [
+    "Q4.crypto"
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "name": "34-crypto-tuf-metadata-stale-or-invalid",
+  "kind": "negative",
+  "description": "Sigstore TUF trust-root metadata is stale or invalid",
+  "expected": "verify-reject",
+  "rejectStage": "crypto-verification",
+  "expectedErrorCode": "crypto.tuf_metadata_stale_or_invalid",
+  "rejectPointer": "/verificationMaterial",
+  "invariants": [
+    "Q4.crypto"
+  ]
+}

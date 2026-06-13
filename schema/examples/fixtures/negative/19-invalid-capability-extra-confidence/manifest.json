@@ -1,0 +1,11 @@
+{
+  "name": "19-invalid-capability-extra-confidence",
+  "kind": "negative",
+  "expected": "schema-reject",
+  "rejectStage": "schema-validation",
+  "expectedErrorCode": "capability.additional_property",
+  "rejectPointer": "/aibom/components/0/capabilities/declared/0/confidence",
+  "invariants": ["Q5.af"],
+  "description": "Capability object carries an extra `confidence` field. ADR-0005 deferred the confidence field from v0.1; the schema uses additionalProperties: false on capability objects, so any extra field (including confidence) rejects.",
+  "notes": "This fixture enforces the deferral decision from ADR-0005 at schema-validation time. If a future schema version re-introduces confidence, it must be renamed to evidenceConfidence with strict semantics (confidence in evidence-to-capability mapping, not trust in the claim) and added to the allowed-property set explicitly. Policies must not read such a field for allow decisions in v0.1 even if an emitter adds it under an extension namespace."
+}

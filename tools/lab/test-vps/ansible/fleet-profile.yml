@@ -1,0 +1,107 @@
+---
+- name: Run one Reeve fleet validation profile
+  hosts: reeve_vps
+  gather_facts: true
+
+  vars:
+    phase1_remote_dir: /root/reeve-phase1
+    profile_user: reeve-lab
+    profile_home: "/home/{{ profile_user }}"
+    scan_target_root: "{{ profile_home }}"
+    release_signer_identity_regexp: '^https://github.com/Reeve-Security/reeve/.github/workflows/release.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+.*$'
+    release_oidc_issuer: https://token.actions.githubusercontent.com
+    surface_signer_identity_regexp: ''
+    evidence_dir: evidence
+    profile_agents: []
+    expected_aibom:
+      min_occurrences:
+        aibom: 1
+
+  pre_tasks:
+    - name: Require fleet profile inputs
+      ansible.builtin.assert:
+        that:
+          - profile_name is defined
+          - reeve_release_archive_path is defined
+          - reeve_release_bundle_path is defined
+          - surface_config_path is defined
+          - surface_config_bundle_path is defined
+          - surface_signer_identity_regexp | length > 0
+        fail_msg: "Pass profile_name, release inputs, surface config inputs, and surface signer regexp with -e."
+
+  tasks:
+    - name: Prepare fleet profile user
+      ansible.builtin.include_role:
+        name: agent_profile_user
+
+    - name: Prepare release inputs
+      ansible.builtin.include_role:
+        name: reeve_install
+        tasks_from: release
+
+    - name: Stage signed surface config
+      ansible.builtin.include_role:
+        name: reeve_surface_config
+
+    - name: Seed Claude Code profile fixtures
+      ansible.builtin.include_role:
+        name: agent_claude_code
+      when: "'claude_code' in profile_agents"
+
+    - name: Seed Claude Code deny-heavy profile fixtures
+      ansible.builtin.include_role:
+        name: agent_claude_code_deny
+      when: "'claude_code_deny' in profile_agents"
+
+    - name: Seed Claude Desktop profile fixtures
+      ansible.builtin.include_role:
+        name: agent_claude_desktop
+      when: "'claude_desktop' in profile_agents"
+
+    - name: Seed Codex CLI profile fixtures
+      ansible.builtin.include_role:
+        name: agent_codex_cli
+      when: "'codex_cli' in profile_agents"
+
+    - name: Seed Cursor profile fixtures
+      ansible.builtin.include_role:
+        name: agent_cursor
+      when: "'cursor' in profile_agents"
+
+    - name: Seed VS Code MCP profile fixtures
+      ansible.builtin.include_role:
+        name: agent_vscode
+      when: "'vscode' in profile_agents"
+
+    - name: Seed Continue profile fixtures
+      ansible.builtin.include_role:
+        name: agent_continue
+      when: "'continue' in profile_agents"
+
+    - name: Seed Zed profile fixtures
+      ansible.builtin.include_role:
+        name: agent_zed
+      when: "'zed' in profile_agents"
+
+    - name: Seed Factory profile fixtures
+      ansible.builtin.include_role:
+        name: agent_factory
+      when: "'factory' in profile_agents"
+
+    - name: Seed custom surface profile fixtures
+      ansible.builtin.include_role:
+        name: agent_custom_surface
+      when: "'custom_surface' in profile_agents"
+
+    - name: Install Reeve from staged inputs
+      ansible.builtin.include_role:
+        name: reeve_install
+        tasks_from: install
+
+    - name: Validate systemd deployment and produce scan
+      ansible.builtin.include_role:
+        name: reeve_systemd
+
+    - name: Assert and fetch AIBOM evidence
+      ansible.builtin.include_role:
+        name: assert_aibom

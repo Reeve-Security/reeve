@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "factory-review": {
+      "command": "npx",
+      "args": ["-y", "@acme/factory-review-mcp@1.0.0"]
+    }
+  }
+}

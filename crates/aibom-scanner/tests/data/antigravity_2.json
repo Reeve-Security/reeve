@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "antigravity-remote": {
+      "url": "https://mcp.antigravity.example/sse"
+    }
+  }
+}

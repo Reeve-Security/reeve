@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "phase1-custom-agent": {
+      "command": "python3",
+      "args": ["-m", "phase1_custom_agent"]
+    }
+  }
+}

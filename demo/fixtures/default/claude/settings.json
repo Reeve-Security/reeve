@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "local-shell": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-shell"]
+    },
+    "payments-helper": {
+      "command": "npx",
+      "args": ["-y", "acme-payments-helper"]
+    }
+  },
+  "permissions": {
+    "allow": [
+      "Read(/Users/alice/projects/**)",
+      "Bash(rm -rf /tmp/reeve-demo)",
+      "WebFetch(domain:api.example.com)"
+    ],
+    "deny": [
+      "Read(/Users/alice/.ssh/**)"
+    ]
+  }
+}

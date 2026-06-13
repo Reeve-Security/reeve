@@ -1,0 +1,16 @@
+---
+- name: Create Cursor config directory
+  ansible.builtin.file:
+    path: "{{ profile_home }}/.cursor"
+    state: directory
+    owner: "{{ profile_user }}"
+    group: "{{ profile_user }}"
+    mode: "0700"
+
+- name: Seed Cursor MCP fixture
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/fixtures/mcp/cursor-mcp.json"
+    dest: "{{ profile_home }}/.cursor/mcp.json"
+    owner: "{{ profile_user }}"
+    group: "{{ profile_user }}"
+    mode: "0600"

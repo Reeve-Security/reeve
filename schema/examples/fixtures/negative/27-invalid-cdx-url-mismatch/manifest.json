@@ -1,0 +1,11 @@
+{
+  "name": "27-invalid-cdx-url-mismatch",
+  "kind": "negative",
+  "expected": "schema-reject",
+  "rejectStage": "semantic-validation",
+  "expectedErrorCode": "cdx.externalReferences.url_mismatch",
+  "rejectPointer": "/components/0/externalReferences/0/url",
+  "invariants": ["Q1.a"],
+  "description": "CDX externalReferences[].url is `wrong-name.aibom.json` but the distributed sidecar filename is `fixture-27.aibom.json`. The hash in externalReferences is correct for the actual sidecar bytes — the defect is purely the url-to-filename binding.",
+  "notes": "Even with a correct hash, a url that does not resolve to the distributed sidecar means a generic CDX verifier cannot fetch-and-hash-verify. ADR-0001 requires the externalReferences entry to point at the actual distributed sidecar. This is a co-location check, complementary to the hash-match check in fixture 17 — fixture 17 has matching filename but wrong hash; fixture 27 has matching hash but wrong filename."
+}

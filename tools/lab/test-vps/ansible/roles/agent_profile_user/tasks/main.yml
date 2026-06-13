@@ -1,0 +1,15 @@
+---
+- name: Create fleet profile user
+  ansible.builtin.user:
+    name: "{{ profile_user }}"
+    home: "{{ profile_home }}"
+    shell: /bin/bash
+    create_home: true
+
+- name: Ensure profile home permissions
+  ansible.builtin.file:
+    path: "{{ profile_home }}"
+    state: directory
+    owner: "{{ profile_user }}"
+    group: "{{ profile_user }}"
+    mode: "0755"

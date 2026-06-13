@@ -1,0 +1,48 @@
+title = "Reeve repository boundary policy"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Repository fixtures and documented placeholder examples"
+paths = [
+  '''^schema/examples/fixtures/''',
+  '''^schema/examples/fixtures-v0\.2\.0/''',
+  # Secret-scanner test fixtures: these files intentionally embed example/realistic
+  # credentials to exercise the conversation secret detectors (#407 precision tests).
+  '''^crates/aibom-scanner/src/sensitive_data\.rs$''',
+  '''^crates/aibom-cli/tests/cli_e2e\.rs$''',
+  '''^scripts/check-release-sensitive-data-flags\.py$''',
+  # Official CycloneDX spec schemas bundled as test fixtures (#474): the SPDX
+  # license-ID list trips the generic-api-key entropy rule (license names look
+  # like keys). Upstream spec content, no secrets.
+  '''^crates/aibom-scanner/tests/data/cyclonedx/''',
+]
+regexes = [
+  '''hcc_x{20,}''',
+]
+
+[[rules]]
+id = "hetzner-cloud-token"
+description = "Hetzner Cloud API token"
+regex = '''\bhcc_[A-Za-z0-9]{20,}\b'''
+keywords = ["hcc_", "HCLOUD_TOKEN"]
+
+[[rules.allowlists]]
+description = "README placeholder Hetzner token"
+regexes = [
+  '''hcc_x{20,}''',
+]
+
+[[rules]]
+id = "github-token-extended"
+description = "GitHub token"
+regex = '''\b(?:gh[opusr]_[A-Za-z0-9]{36,255}|github_pat_[A-Za-z0-9_]{20,255})\b'''
+keywords = ["ghp_", "gho_", "ghu_", "ghs_", "ghr_", "github_pat_"]
+
+[[rules]]
+id = "vps-inventory-ip"
+description = "Concrete VPS IP captured in inventory"
+path = '''(^|/)inventory\.yml$'''
+regex = '''(?m)^\s*(?:\d{1,3}\.){3}\d{1,3}\s+ansible_user=root\b'''
+keywords = ["ansible_user=root"]

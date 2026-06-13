@@ -1,0 +1,11 @@
+{
+  "name": "23-invalid-bom-ref-duplicate",
+  "kind": "negative",
+  "expected": "schema-reject",
+  "rejectStage": "semantic-validation",
+  "expectedErrorCode": "aibom.components.bom_ref_duplicate",
+  "rejectPointer": "/aibom/components/1/bom-ref",
+  "invariants": ["Q1.d"],
+  "description": "Two sidecar components share the same bom-ref. Harness must reject at semantic-validation because JSON Schema cannot express uniqueness on a sub-field across array items without bespoke $dynamicRef machinery.",
+  "notes": "bom-ref is the cross-file anchor between sidecar and CycloneDX. Duplicate bom-refs produce ambiguous policy-verdict and vulnerability attributions. This check is intra-sidecar, performed after schema-validation passes the structural shape."
+}

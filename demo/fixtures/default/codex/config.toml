@@ -1,0 +1,11 @@
+[mcp_servers.filesystem]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-filesystem@2.3.1", "/tmp"]
+
+[projects."/workspaces/acme"]
+trust_level = "trusted"
+approval_policy = "never"
+sandbox_mode = "workspace-write"
+
+[apps.connector_example.tools.github_merge_pull_request]
+approval_mode = "approve"

@@ -1,0 +1,57 @@
+---
+- name: Create local evidence directory
+  ansible.builtin.file:
+    path: "{{ evidence_dir }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+
+- name: Fetch first AIBOM output
+  ansible.builtin.fetch:
+    src: "{{ (scan_outputs.files | sort(attribute='mtime') | last).path }}"
+    dest: "{{ evidence_dir }}/phase1-latest.aibom.json"
+    flat: true
+
+- name: Assert AIBOM shape for profile
+  ansible.builtin.command:
+    argv:
+      - python3
+      - "{{ playbook_dir }}/assert-aibom.py"
+      - "{{ evidence_dir }}/phase1-latest.aibom.json"
+      - "{{ expected_aibom | to_json }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+
+- name: Write remote validation summary
+  ansible.builtin.copy:
+    dest: "{{ phase1_remote_dir }}/validation-summary.txt"
+    mode: "0644"
+    content: |
+      Reeve Phase 1 VPS validation
+      Profile: {{ profile_name | default('phase1') }}
+      OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+      Release verification: {{ release_verify.stdout | default('') | trim }}
+      Surface config verification: {{ surface_verify.stdout | default('') | trim }}
+      Install output: {{ install_result.stdout | default('') | trim }}
+      Timer enabled: {{ timer_enabled.stdout | trim }}
+      Timer active: {{ timer_active.stdout | trim }}
+      Scope list first line: {{ (scope_list.stdout_lines | default(['']))[0] }}
+      AIBOM outputs: {{ scan_outputs.files | map(attribute='path') | list | join(', ') }}
+
+- name: Fetch validation summary
+  ansible.builtin.fetch:
+    src: "{{ phase1_remote_dir }}/validation-summary.txt"
+    dest: "{{ evidence_dir }}/validation-summary.txt"
+    flat: true
+
+- name: Print closure evidence
+  ansible.builtin.debug:
+    msg:
+      - "Release archive verified with cosign."
+      - "Surface config bundle verified with cosign."
+      - "Signed surface config verified with installed Reeve binary."
+      - "Systemd timer state: enabled={{ timer_enabled.stdout | trim }}, active={{ timer_active.stdout | trim }}."
+      - "AIBOM outputs found: {{ scan_outputs.matched }}."
+      - "Evidence fetched to {{ evidence_dir }}/."

@@ -1,0 +1,56 @@
+use crate::statement::{
+    ArtifactPair, SensitiveDataReportArtifact, build_sensitive_data_report_statement,
+    build_statement,
+};
+use aibom_core::{DSSE_PAYLOAD_TYPE, SIGSTORE_BUNDLE_MEDIA_TYPE};
+use anyhow::Result;
+use base64::prelude::*;
+use serde_json::{Value, json};
+use std::fs;
+use std::path::Path;
+
+pub type SigstoreBundle = Value;
+
+pub fn fixture_bundle(pair: &ArtifactPair<'_>) -> Result<SigstoreBundle> {
+    let statement = build_statement(pair);
+    fixture_bundle_for_statement(&statement)
+}
+
+pub fn fixture_sensitive_data_report_bundle(
+    report: &SensitiveDataReportArtifact<'_>,
+) -> Result<SigstoreBundle> {
+    let statement = build_sensitive_data_report_statement(report);
+    fixture_bundle_for_statement(&statement)
+}
+
+pub fn fixture_bundle_for_statement(statement: &Value) -> Result<SigstoreBundle> {
+    let payload = BASE64_STANDARD.encode(serde_json::to_vec(statement)?);
+    Ok(json!({
+        "mediaType": SIGSTORE_BUNDLE_MEDIA_TYPE,
+        "verificationMaterial": {
+            "_fixture_note": "placeholder; real Fulcio cert + Rekor v2 proof generated via task #9 online signer",
+            "certificate": {"rawBytes": "FIXTURE_PLACEHOLDER_CERT_BYTES"},
+            "tlogEntries": [{
+                "_fixture_note": "placeholder Rekor v2 dsse entry",
+                "kindVersion": {"kind": "dsse", "version": "0.0.1"}
+            }]
+        },
+        "dsseEnvelope": {
+            "payload": payload,
+            "payloadType": DSSE_PAYLOAD_TYPE,
+            "signatures": [{"_fixture_note":"placeholder signature","sig":"FIXTURE_PLACEHOLDER_SIGNATURE"}]
+        }
+    }))
+}
+
+pub fn write_fixture_bundle(path: &Path, pair: &ArtifactPair<'_>) -> Result<()> {
+    let bundle = fixture_bundle(pair)?;
+    fs::write(path, serde_json::to_vec_pretty(&bundle)?)?;
+    Ok(())
+}
+
+pub fn write_fixture_bundle_for_statement(path: &Path, statement: &Value) -> Result<()> {
+    let bundle = fixture_bundle_for_statement(statement)?;
+    fs::write(path, serde_json::to_vec_pretty(&bundle)?)?;
+    Ok(())
+}

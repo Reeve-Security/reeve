@@ -1,0 +1,20 @@
+{
+  "projects": {
+    "default": {
+      "mcpServers": {
+        "repo-tools": {
+          "command": "uvx",
+          "args": ["repo-tools-mcp"]
+        }
+      }
+    }
+  },
+  "permissions": {
+    "allow": [
+      "Edit(/Users/alice/repo/**)",
+      "Bash(sudo systemctl restart demo.service)",
+      "mcp__repo-tools__deploy"
+    ],
+    "deny": []
+  }
+}

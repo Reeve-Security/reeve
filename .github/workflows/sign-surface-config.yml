@@ -1,0 +1,53 @@
+name: sign surface config
+
+on:
+  workflow_dispatch:
+    inputs:
+      config_base64:
+        description: Base64-encoded surfaces.yaml bytes to sign
+        required: true
+        type: string
+      artifact_name:
+        description: GitHub artifact name for the signed config bundle
+        required: false
+        default: signed-surface-config
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  sign:
+    name: sign surfaces.yaml
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.8.1
+
+      - name: Decode surface config
+        run: |
+          set -euo pipefail
+          printf '%s' '${{ inputs.config_base64 }}' | base64 -d > surfaces.yaml
+          test -s surfaces.yaml
+          sha256sum surfaces.yaml
+
+      - name: Sign surface config
+        run: |
+          set -euo pipefail
+          cosign sign-blob --yes \
+            --bundle surfaces.yaml.sigstore.json \
+            surfaces.yaml
+          test -s surfaces.yaml.sigstore.json
+
+      - name: Upload signed surface config
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          if-no-files-found: error
+          path: |
+            surfaces.yaml
+            surfaces.yaml.sigstore.json
+          retention-days: 7

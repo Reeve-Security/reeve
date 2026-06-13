@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "repo-fetch": {
+      "command": "npx",
+      "args": ["-y", "@acme/repo-fetch-mcp"]
+    }
+  }
+}

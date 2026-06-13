@@ -1,0 +1,56 @@
+# Review-only endpoint subset from infra/demo-fleet/variant-matrix.md.
+# This file is for plan review. Do not apply it.
+
+linux_endpoints = {
+  eng-linux-02 = {
+    persona         = "engineering"
+    recording_scene = [3]
+  }
+  eng-linux-03 = {
+    persona         = "engineering"
+    recording_scene = [7]
+  }
+  eng-linux-06 = {
+    persona         = "engineering"
+    recording_scene = [6]
+  }
+  mkt-linux-02 = {
+    persona         = "marketing"
+    recording_scene = [9]
+  }
+}
+
+windows_endpoints = {
+  eng-win-02 = {
+    persona         = "engineering"
+    provider        = "azure"
+    recording_scene = [1]
+  }
+  fin-win-03 = {
+    persona         = "finance"
+    provider        = "azure"
+    recording_scene = [4, 8, 9]
+  }
+  sales-win-03 = {
+    persona         = "sales"
+    provider        = "azure"
+    recording_scene = [4]
+  }
+}
+
+macos_endpoints = {
+  eng-macos-01 = {
+    persona         = "engineering"
+    tart_image      = "reeve-demo-macos"
+    host            = "mac-mini"
+    recording_scene = [3]
+  }
+  sales-macos-01 = {
+    persona         = "sales"
+    tart_image      = "reeve-demo-macos"
+    host            = "mac-mini"
+    recording_scene = [5]
+  }
+}
+
+artifact_bucket = ""

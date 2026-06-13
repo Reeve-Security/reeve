@@ -1,0 +1,5 @@
+#cloud-config
+write_files:
+  - path: /etc/reeve-phase1-validation
+    content: "Provisioned for Reeve Phase 1 VPS validation\n"
+    permissions: "0644"

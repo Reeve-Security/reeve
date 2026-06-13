@@ -1,0 +1,56 @@
+---
+- name: Phase 1 - validate Reeve deployment template on clean Ubuntu VPS
+  hosts: reeve_vps
+  gather_facts: true
+
+  vars:
+    profile_name: phase1
+    phase1_remote_dir: /root/reeve-phase1
+    release_signer_identity_regexp: '^https://github.com/Reeve-Security/reeve/.github/workflows/release.yml@refs/tags/v[0-9]+\.[0-9]+\.[0-9]+.*$'
+    release_oidc_issuer: https://token.actions.githubusercontent.com
+    surface_signer_identity_regexp: ''
+    evidence_dir: evidence
+    expected_aibom:
+      min_occurrences:
+        aibom: 1
+
+  pre_tasks:
+    - name: Require local release archive path
+      ansible.builtin.assert:
+        that:
+          - reeve_release_archive_path is defined
+          - reeve_release_bundle_path is defined
+          - surface_config_path is defined
+          - surface_config_bundle_path is defined
+          - surface_signer_identity_regexp | length > 0
+        fail_msg: "Pass release archive, release bundle, surface config, surface bundle, and surface signer regexp with -e."
+
+    - name: Require Ubuntu target
+      ansible.builtin.assert:
+        that:
+          - ansible_distribution == "Ubuntu"
+          - ansible_distribution_version is version("24.04", ">=")
+        fail_msg: "Phase 1 validation expects a clean Ubuntu 24.04+ VPS."
+
+  tasks:
+    - name: Prepare release inputs
+      ansible.builtin.include_role:
+        name: reeve_install
+        tasks_from: release
+
+    - name: Stage signed surface config
+      ansible.builtin.include_role:
+        name: reeve_surface_config
+
+    - name: Install Reeve from staged inputs
+      ansible.builtin.include_role:
+        name: reeve_install
+        tasks_from: install
+
+    - name: Validate systemd deployment and produce scan
+      ansible.builtin.include_role:
+        name: reeve_systemd
+
+    - name: Assert and fetch AIBOM evidence
+      ansible.builtin.include_role:
+        name: assert_aibom

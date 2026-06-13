@@ -1,0 +1,17 @@
+{
+  "com.example.signed-notes": {
+    "displayName": "Signed Notes MCP",
+    "packageVersion": "1.4.0",
+    "signatureInfo": {
+      "status": "verified"
+    },
+    "server": {
+      "type": "node",
+      "entry_point": "server.js"
+    },
+    "tools": [
+      "fetch_url",
+      "list_notes"
+    ]
+  }
+}

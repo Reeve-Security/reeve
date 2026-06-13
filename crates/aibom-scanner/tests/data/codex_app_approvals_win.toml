@@ -1,0 +1,18 @@
+[features]
+plugins = true
+
+[marketplaces.openai-bundled]
+source_type = "local"
+source = "C:\\Users\\testuser\\.codex\\.tmp\\bundled-marketplaces\\openai-bundled"
+
+[plugins."github@openai-bundled"]
+enabled = true
+
+[apps.github.tools.merge_pull_request]
+approval_mode = "approve"
+
+[apps.powershell.tools.run_command]
+approval_mode = "approve"
+
+[projects."C:\\Users\\testuser\\projects\\secret-client-work"]
+trust_level = "trusted"

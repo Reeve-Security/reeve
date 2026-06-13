@@ -1,0 +1,92 @@
+# Rust build artifacts
+/target
+**/*.rs.bk
+
+# Cargo.lock is committed for binary crates and excluded for libraries;
+# revisit once the workspace is populated.
+
+# IDE / editor
+.claude/
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Logs and test output
+*.log
+/coverage
+/test-results
+/tmp
+
+# Python cache artifacts
+__pycache__/
+*.py[cod]
+
+# Local docs scratch output
+/docs/audits/
+/docs/marketing/
+
+# Founder-private working area — never committed
+# Canonical private docs live in the Reeve-Security/reeve-private repo.
+# Anything under /private/ stays local. Use for plans, customer notes,
+# pricing decisions, founder-review documents, and any other internal
+# content that should not appear in the public OSS repository.
+/private/
+
+# Internal agent operating procedures — local-only, not for public OSS repo
+AGENTS.md
+.manager-worktrees/
+
+# Phase 1 VPS validation local state
+/tools/lab/test-vps/terraform/.terraform/
+/tools/lab/test-vps/terraform/.terraform.lock.hcl
+/tools/lab/test-vps/terraform/*.tfstate
+/tools/lab/test-vps/terraform/*.tfstate.*
+/tools/lab/test-vps/ansible/inventory.yml
+/tools/lab/test-vps/ansible/evidence/
+
+# Demo fleet Terraform local state
+/infra/demo-fleet/terraform/.terraform/
+/infra/demo-fleet/terraform/.terraform.lock.hcl
+/infra/demo-fleet/terraform/*.tfplan
+/infra/demo-fleet/terraform/recording.tfvars
+
+# macOS Tart validation local state
+/tools/lab/test-mac/tmp/
+
+# WASM build output
+*.wasm
+!crates/aibom-policy/bundles/*.wasm
+
+# Local environment
+.env
+.env.local
+.envrc
+
+.pi/regista.db
+.pi/regista.db-shm
+.pi/regista.db-wal
+.pi/worktrees/
+.pi/
+
+# Local scan artifacts and operator state
+*.aibom.json
+!schema/examples/fixtures/**/*.aibom.json
+!schema/examples/fixtures-v0.2.0/**/*.aibom.json
+!schema/examples/fixtures-v0.3.0/**/*.aibom.json
+*.cdx.json
+!schema/examples/fixtures/**/*.cdx.json
+!schema/examples/fixtures-v0.2.0/**/*.cdx.json
+!schema/examples/fixtures-v0.3.0/**/*.cdx.json
+*.sigstore.json
+!schema/examples/fixtures/**/*.sigstore.json
+!schema/examples/fixtures-v0.2.0/**/*.sigstore.json
+!schema/examples/fixtures-v0.3.0/**/*.sigstore.json
+*.tfstate
+*.tfstate.*
+inventory.yml

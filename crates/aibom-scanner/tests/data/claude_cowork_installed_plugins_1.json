@@ -1,0 +1,9 @@
+{
+  "installedPlugins": [
+    {
+      "id": "slack",
+      "name": "Slack",
+      "enabled": true
+    }
+  ]
+}

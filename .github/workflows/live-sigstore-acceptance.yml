@@ -1,0 +1,162 @@
+name: live-sigstore-acceptance
+
+# v0.1 online acceptance gate for issue #13. Proves that --sign-mode real
+# produces a live Sigstore bundle (real Fulcio cert + Rekor v2 tlog entry)
+# using the GitHub Actions OIDC identity, and that the validator accepts
+# that bundle under --verify-crypto.
+#
+# Deliberately separate from ci.yml so the fixture-only release-readiness
+# runner stays free of cosign/Sigstore/Rekor dependencies. Triggers are
+# workflow_dispatch (manual acceptance sign-off), release tags (v*), and
+# explicitly labeled PRs. Per ADR-0007 this is not wired into every push
+# to main so we do not publish a Rekor entry on every commit.
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  live-sigstore:
+    if: >-
+      github.event_name != 'pull_request' ||
+      contains(github.event.pull_request.labels.*.name, 'online-sigstore')
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    env:
+      REEVE_SIGN_MODE: real
+      REEVE_ONLINE_SIGSTORE: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install OPA
+        run: |
+          curl --fail --location --retry 5 --show-error \
+            -o /usr/local/bin/opa \
+            https://openpolicyagent.org/downloads/latest/opa_linux_amd64
+          chmod +x /usr/local/bin/opa
+          opa version
+
+      - name: Install cosign v3.0.6
+        env:
+          COSIGN_VERSION: v3.0.6
+          COSIGN_LINUX_AMD64_SHA256: c956e5dfcac53d52bcf058360d579472f0c1d2d9b69f55209e256fe7783f4c74
+        run: |
+          curl --fail --location --retry 5 --show-error \
+            -o cosign \
+            "https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-amd64"
+          echo "${COSIGN_LINUX_AMD64_SHA256}  cosign" | sha256sum --check -
+          sudo install -m 0755 cosign /usr/local/bin/cosign
+
+      - name: Print cosign version
+        run: cosign version
+
+      - name: Run online Sigstore smoke test
+        run: cargo test -p aibom-signer --test online_smoke -- --ignored --nocapture
+
+      - name: Build aibom-cli (release)
+        run: cargo build --release -p aibom-cli
+
+      - name: Scan committed CLI target with --sign-mode real
+        run: |
+          rm -rf out
+          mkdir -p out
+          ./target/release/aibom-cli scan \
+            --target crates/aibom-cli/tests/data/cli-scan-target \
+            --output-dir out \
+            --sign-mode real
+
+      - name: Inspect produced Sigstore bundle
+        run: |
+          set -euo pipefail
+          BUNDLE="$(ls out/*.sigstore.json)"
+          AIBOM="$(ls out/*.aibom.json)"
+          CDX="$(ls out/*.cdx.json)"
+          echo "bundle: $BUNDLE"
+          # Guard against accidental fixture output. The scanner writes
+          # .sigstore.fixture.json in fixture mode, so a fixture bundle
+          # here would have failed the glob above.
+          if ls out/*.sigstore.fixture.json >/dev/null 2>&1; then
+            echo "ERROR: fixture bundle found in real-mode output" >&2
+            exit 1
+          fi
+          python3 - "$BUNDLE" "$AIBOM" "$CDX" <<'PY'
+          import base64, hashlib, json, pathlib, sys
+          bundle_path, aibom_path, cdx_path = map(pathlib.Path, sys.argv[1:])
+          bundle = json.load(open(bundle_path))
+          vm = bundle.get("verificationMaterial") or {}
+          assert "_fixture_note" not in vm, "real bundle leaked a fixture marker"
+          cert = (vm.get("certificate") or {}).get("rawBytes") or ""
+          assert cert and cert != "FIXTURE_PLACEHOLDER_CERT_BYTES", "certificate.rawBytes missing or placeholder"
+          # Fulcio certs are DER-encoded X.509, base64-encoded in the bundle.
+          # Decoding should succeed and yield >200 bytes for a real cert.
+          cert_der = base64.b64decode(cert)
+          assert len(cert_der) > 200, f"certificate.rawBytes decoded to only {len(cert_der)} bytes"
+          tlog = vm.get("tlogEntries") or []
+          assert tlog, "tlogEntries missing"
+          entry = tlog[0]
+          assert "_fixture_note" not in entry, "tlog entry leaked fixture marker"
+          assert "logIndex" in entry, "tlogEntries[0].logIndex missing"
+          assert "logId" in entry, "tlogEntries[0].logId missing"
+          kind = entry.get("kindVersion") or {}
+          assert kind.get("kind") == "dsse", f"expected DSSE Rekor entry, got {kind!r}"
+          assert kind.get("version"), "tlogEntries[0].kindVersion.version missing"
+          body = entry.get("canonicalizedBody")
+          assert body, "tlogEntries[0].canonicalizedBody missing"
+          proof = entry.get("inclusionProof") or {}
+          assert proof.get("checkpoint"), "tlogEntries[0].inclusionProof.checkpoint missing"
+          dsse = bundle.get("dsseEnvelope") or {}
+          assert dsse.get("payloadType"), "dsseEnvelope.payloadType missing"
+          payload = dsse.get("payload")
+          assert payload, "dsseEnvelope.payload missing"
+          statement = json.loads(base64.b64decode(payload))
+          assert statement.get("_type") == "https://in-toto.io/Statement/v1", "unexpected in-toto statement type"
+          assert statement.get("predicateType") == "https://aibom.example/attestation/aibom/v0.1", \
+              "unexpected predicateType"
+          subjects = statement.get("subject") or []
+          assert len(subjects) == 2, f"expected exactly two statement subjects, got {len(subjects)}"
+          expected = {
+              aibom_path.name: hashlib.sha256(aibom_path.read_bytes()).hexdigest(),
+              cdx_path.name: hashlib.sha256(cdx_path.read_bytes()).hexdigest(),
+          }
+          for subject in subjects:
+              name = subject.get("name")
+              assert name in expected, f"unexpected statement subject {name!r}"
+              assert (subject.get("digest") or {}).get("sha256") == expected[name], \
+                  f"sha256 mismatch for statement subject {name}"
+          roles = (statement.get("predicate") or {}).get("artifactRoles") or {}
+          assert roles.get(aibom_path.name) == "aibom-sidecar", "AIBOM subject role missing"
+          assert roles.get(cdx_path.name) == "cyclonedx", "CycloneDX subject role missing"
+          sigs = dsse.get("signatures") or []
+          assert sigs and sigs[0].get("sig") and sigs[0]["sig"] != "FIXTURE_PLACEHOLDER_SIGNATURE", \
+              "dsseEnvelope.signatures[0].sig missing or placeholder"
+          print(f"OK live bundle: logIndex={entry['logIndex']} cert_bytes={len(cert_der)}")
+          PY
+
+      - name: Verify bundle with cosign and GitHub OIDC identity
+        run: |
+          set -euo pipefail
+          BUNDLE="$(ls out/*.sigstore.json)"
+          AIBOM="$(ls out/*.aibom.json)"
+          cosign verify-blob-attestation \
+            --bundle "$BUNDLE" \
+            --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/.*" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            --certificate-github-workflow-repository "$GITHUB_REPOSITORY" \
+            --type "https://aibom.example/attestation/aibom/v0.1" \
+            "$AIBOM"
+
+      - name: Verify bundle through validator (--verify-crypto)
+        run: |
+          ./target/release/aibom-cli verify out --verify-crypto \
+            | tee verify.stdout
+          grep -q '^PASS artifacts$' verify.stdout

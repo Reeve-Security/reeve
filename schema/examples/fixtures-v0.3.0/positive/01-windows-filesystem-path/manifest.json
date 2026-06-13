@@ -1,0 +1,11 @@
+{
+  "name": "01-windows-filesystem-path",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "v0.3.0 fixture: filesystem path qualifiers accept absolute Windows drive and UNC paths.",
+  "invariants": [
+    "ADR-0025.a",
+    "ADR-0025.b"
+  ],
+  "schemaVersion": "0.3.0"
+}

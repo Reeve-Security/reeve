@@ -1,0 +1,18 @@
+- name: Apply HR demo persona
+  ansible.builtin.include_role:
+    name: mcp_catalog
+  vars:
+    demo_assistants:
+      - claude-desktop
+
+- name: Plant HR approvals
+  ansible.builtin.include_role:
+    name: approval_state
+
+- name: Plant HR secret fixtures
+  ansible.builtin.include_role:
+    name: planted_secrets
+
+- name: Plant HR vulnerable-version placeholders
+  ansible.builtin.include_role:
+    name: vulnerable_version_evidence

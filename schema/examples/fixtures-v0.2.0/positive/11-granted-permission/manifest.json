@@ -1,0 +1,11 @@
+{
+  "name": "11-granted-permission",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "v0.2.0 fixture: one component with a granted permission (user-approved fs:read on /home/user/projects). Exercises the new 'granted' capability source and 'granted-permission' evidence kind introduced in ADR-0008.",
+  "invariants": [
+    "ADR-0008.a",
+    "ADR-0008.b"
+  ],
+  "schemaVersion": "0.2.0"
+}

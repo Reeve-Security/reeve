@@ -1,0 +1,14 @@
+{
+  "name": "04-filesystem-prefix",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "Exercises ADR-0005 path qualifier semantics: fs:read with exact path /etc/passwd; fs:write with prefix path /tmp/ (descendants-of semantics).",
+  "invariants": [
+    "Q1.a", "Q1.b",
+    "Q2.e", "Q2.f",
+    "Q3.h", "Q3.i",
+    "Q4.n", "Q4.o", "Q4.p", "Q4.q", "Q4.r", "Q4.s", "Q4.t", "Q4.u",
+    "Q5.w", "Q5.x", "Q5.ah", "Q5.ad", "Q5.ae", "Q5.af"
+  ],
+  "notes": "Per ADR-0005: prefix /tmp/ matches any descendant under /tmp/ (e.g., /tmp/abc, /tmp/nested/dir/file) but NOT /tmp itself. An emitter that wanted to declare read access to /tmp as a directory would emit qualifier path=/tmp (exact), not path=/tmp/ (prefix). POSIX path grammar only; Windows paths deferred to v1.x. Evidence ev-004 (sandbox-syscall open /tmp/abc:WRITE) demonstrates the prefix match: the write was to a descendant of the declared prefix, so no delta."
+}

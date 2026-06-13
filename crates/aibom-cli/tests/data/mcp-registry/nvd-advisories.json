@@ -1,0 +1,131 @@
+{
+  "advisories": [
+    {
+      "cve": {
+        "id": "CVE-2026-2100",
+        "descriptions": [
+          {
+            "lang": "en",
+            "value": "left-pad 1.2.3 is vulnerable in the bounded NVD fixture"
+          }
+        ]
+      },
+      "configurations": [
+        {
+          "nodes": [
+            {
+              "cpeMatch": [
+                {
+                  "vulnerable": true,
+                  "criteria": "cpe:2.3:a:left-pad:left-pad:*:*:*:*:*:*:*:*",
+                  "package": {
+                    "ecosystem": "npm",
+                    "name": "left-pad"
+                  },
+                  "versionStartIncluding": "1.2.3",
+                  "versionEndIncluding": "1.2.3"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-2200",
+        "descriptions": [
+          {
+            "lang": "en",
+            "value": "requests stays vulnerable until 2.31.1 in the bounded NVD fixture"
+          }
+        ]
+      },
+      "configurations": [
+        {
+          "nodes": [
+            {
+              "cpeMatch": [
+                {
+                  "vulnerable": true,
+                  "criteria": "cpe:2.3:a:python-requests:requests:*:*:*:*:*:*:*:*",
+                  "package": {
+                    "ecosystem": "pypi",
+                    "name": "requests"
+                  },
+                  "versionStartIncluding": "0",
+                  "versionEndExcluding": "2.31.1"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-2300",
+        "descriptions": [
+          {
+            "lang": "en",
+            "value": "click only becomes vulnerable after the clean fixture version"
+          }
+        ]
+      },
+      "configurations": [
+        {
+          "nodes": [
+            {
+              "cpeMatch": [
+                {
+                  "vulnerable": true,
+                  "criteria": "cpe:2.3:a:palletsprojects:click:*:*:*:*:*:*:*:*",
+                  "package": {
+                    "ecosystem": "pypi",
+                    "name": "click"
+                  },
+                  "versionStartIncluding": "8.2.0"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "cve": {
+        "id": "CVE-2026-2400",
+        "descriptions": [
+          {
+            "lang": "en",
+            "value": "click 8.1.7 is vulnerable through a nested child node in the bounded NVD fixture"
+          }
+        ]
+      },
+      "configurations": [
+        {
+          "nodes": [
+            {
+              "children": [
+                {
+                  "cpeMatch": [
+                    {
+                      "vulnerable": true,
+                      "criteria": "cpe:2.3:a:palletsprojects:click:*:*:*:*:*:*:*:*",
+                      "package": {
+                        "ecosystem": "pypi",
+                        "name": "click"
+                      },
+                      "versionStartIncluding": "8.1.7",
+                      "versionEndIncluding": "8.1.7"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

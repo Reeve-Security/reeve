@@ -1,0 +1,68 @@
+---
+- name: Confirm system paths exist
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  register: installed_paths
+  loop:
+    - /usr/local/bin/aibom-cli
+    - /etc/reeve/surfaces.yaml
+    - /etc/reeve/surfaces.yaml.sigstore.json
+    - /etc/systemd/system/reeve-scan.service
+    - /etc/systemd/system/reeve-scan.timer
+
+- name: Assert system paths exist
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+    fail_msg: "Missing installed path: {{ item.stat.path }}"
+  loop: "{{ installed_paths.results }}"
+
+- name: Confirm timer is enabled
+  ansible.builtin.command: systemctl is-enabled reeve-scan.timer
+  register: timer_enabled
+  changed_when: false
+
+- name: Confirm timer is active
+  ansible.builtin.command: systemctl is-active reeve-scan.timer
+  register: timer_active
+  changed_when: false
+
+- name: Verify signed surface config through installed binary
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/aibom-cli
+      - scope
+      - list
+      - --require-signed-config
+      - --signer-identity-regexp
+      - "{{ surface_signer_identity_regexp }}"
+  register: scope_list
+  changed_when: false
+
+- name: Override fleet scan target in systemd service
+  ansible.builtin.replace:
+    path: /etc/systemd/system/reeve-scan.service
+    regexp: '--target /home '
+    replace: '--target {{ scan_target_root }} '
+  when: scan_target_root is defined
+
+- name: Reload systemd after fleet scan-target override
+  ansible.builtin.command: systemctl daemon-reload
+  changed_when: true
+  when: scan_target_root is defined
+
+- name: Trigger one scan through systemd service
+  ansible.builtin.command: systemctl start reeve-scan.service
+  changed_when: true
+
+- name: Find scan outputs
+  ansible.builtin.find:
+    paths: /var/lib/reeve/scans
+    patterns: "*.aibom.json"
+  register: scan_outputs
+
+- name: Assert at least one AIBOM was written
+  ansible.builtin.assert:
+    that:
+      - scan_outputs.matched | int > 0
+    fail_msg: "No AIBOM output found under /var/lib/reeve/scans."

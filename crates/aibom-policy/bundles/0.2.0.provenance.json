@@ -1,0 +1,85 @@
+{
+  "bundleVersion": "0.2.0",
+  "command": "opa build -t wasm -e reeve/policy/verdicts -o bundle.tar.gz policies/",
+  "entrypoint": "reeve/policy/verdicts",
+  "opaVersion": "1.15.2",
+  "outputs": {
+    "dataJson": {
+      "path": "crates/aibom-policy/bundles/0.2.0.json",
+      "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    },
+    "policyWasm": {
+      "path": "crates/aibom-policy/bundles/0.2.0.wasm",
+      "sha256": "f6af048bc85fbadc71e1cb31871f9f4c961633d31d0e95afdf27d7d9ebc4e29e"
+    }
+  },
+  "reproducibility": {
+    "attempts": 16,
+    "dataJsonByteStable": true,
+    "mode": "bounded-reproduction",
+    "note": "OPA 1.15.2 can emit byte-distinct policy.wasm files for the same Rego sources and entrypoint. The check requires the committed wasm hash to be reproduced within the bounded attempt window and requires data.json to remain byte-stable.",
+    "observedPolicyWasmSha256Variants": [
+      "bbcc395c3497ad1f7d6431d8c996312af77988b2e96c5d26f4b2405e0f40b064",
+      "f6af048bc85fbadc71e1cb31871f9f4c961633d31d0e95afdf27d7d9ebc4e29e"
+    ],
+    "policyWasmByteStable": false
+  },
+  "sourcePolicies": [
+    {
+      "path": "policies/00_main.rego",
+      "sha256": "e5d5d65aba95c2981e4e600f7c580d34dfc5a747c4c9ebef5f3c6f88ad617a3c"
+    },
+    {
+      "path": "policies/01-signature-required-production.rego",
+      "sha256": "32d29100cd8c13ccb1f0feef237d04709e1c03874bd1be820c5ffc7dac75af26"
+    },
+    {
+      "path": "policies/02-publisher-allowlist.rego",
+      "sha256": "4589adc4bad2b2d457128698588ea2825ebc4d15b62621d758f02e211457bb0d"
+    },
+    {
+      "path": "policies/03-declared-observed-capability-match.rego",
+      "sha256": "7874d73fa4e39925a92998b1540a5c3ca6d3424401936a681b9ce9f3714fbc8c"
+    },
+    {
+      "path": "policies/04-transport-allowlist.rego",
+      "sha256": "02ef8b1e5a501657622076d45a84120f036e27899309c822ec5661817b688d65"
+    },
+    {
+      "path": "policies/05-maximum-scan-age.rego",
+      "sha256": "6423d791fa5a07b3cf1a1d504d524e40bfdf142dfde5977f26c6f30b8c84e7c7"
+    },
+    {
+      "path": "policies/06-no-undeclared-egress.rego",
+      "sha256": "dcc3bfe654e6629cd3c812950ab5e37b94133d636b677d85812a443b23b6d973"
+    },
+    {
+      "path": "policies/07-no-exec-without-capability.rego",
+      "sha256": "6f1d296e3d5561f816c642de6ca3067a50ff301d0d559b5aeec4b3b2722f7449"
+    },
+    {
+      "path": "policies/08-trusted-package-source.rego",
+      "sha256": "ca76429724fc34287c842a646a153d61baa7d431bdaaf9c2a2925b74c856f05b"
+    },
+    {
+      "path": "policies/09-no-version-downgrade.rego",
+      "sha256": "b29b85eeab13726930aa8d1cc83f2a9a926885f66b2d773167275b2958866d17"
+    },
+    {
+      "path": "policies/10-no-unsigned-mcp-strict.rego",
+      "sha256": "d853c33faeb1194bad1001ee9ba4ad23d03b609d0fb2140598970086360a7dce"
+    },
+    {
+      "path": "policies/11-no-unknown-extension-capability.rego",
+      "sha256": "05d3ce76427541ee3960cae1dfac59ec13b5897c9e84627598d0599dcb96aafd"
+    },
+    {
+      "path": "policies/12-risky-grant.rego",
+      "sha256": "10f7896b5261f46ab86e467c713f0118fe3d09d5ec327299d1aa81b307d739d4"
+    },
+    {
+      "path": "policies/tests/policies_test.rego",
+      "sha256": "648a6338cbf5f481bb62d1729f03a281284680da58e0a1c6b490b56fba10fb27"
+    }
+  ]
+}

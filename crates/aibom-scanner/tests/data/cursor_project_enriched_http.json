@@ -1,0 +1,8 @@
+{
+  "serverIdentifier": "project-http",
+  "serverName": "project-http",
+  "url": "https://mcp.example.com/cursor/project-http/sse",
+  "headers": {
+    "Authorization": "Bearer ${CURSOR_TOKEN}"
+  }
+}

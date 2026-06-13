@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "linear": {
+      "url": "http://127.0.0.1:3923/sse"
+    }
+  }
+}

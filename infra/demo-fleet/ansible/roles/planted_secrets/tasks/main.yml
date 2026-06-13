@@ -1,0 +1,8 @@
+- name: Plant fake conversation secret fixture
+  ansible.builtin.copy:
+    dest: "{{ demo_home }}/.claude/projects/DemoProject/session.jsonl"
+    mode: "0600"
+    content: |
+      {"role":"user","content":"Fixture only for {{ endpoint_id }}: AKIAIOSFODNN7EXAMPLE should be reported by class and never serialized raw."}
+  when: "'SR' in (demo_evidence_slots | default([]))"
+

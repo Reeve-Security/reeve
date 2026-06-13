@@ -1,0 +1,11 @@
+{
+  "name": "16-invalid-duplicate-external-ref",
+  "kind": "negative",
+  "expected": "schema-reject",
+  "rejectStage": "schema-validation",
+  "expectedErrorCode": "cdx.externalReferences.duplicate_type_url",
+  "rejectPointer": "/components/0/externalReferences",
+  "invariants": ["Q3.l"],
+  "description": "CycloneDX component has two externalReferences entries with identical (type, url) pairs. Per ADR-0003, duplicates on (type, url) are forbidden — two references with the same type and URL must be merged into one entry at emit time, not disambiguated by comment or other metadata.",
+  "notes": "The companion sidecar (fixture-16.aibom.json) is a valid minimal AIBOM. The defect is purely in fixture-16.cdx.json. The duplicate-forbidden rule prevents ambiguity in deterministic hashing: if duplicates were permitted, their order within the array would affect canonical bytes."
+}

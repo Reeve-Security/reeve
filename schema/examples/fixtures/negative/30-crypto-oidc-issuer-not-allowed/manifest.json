@@ -1,0 +1,12 @@
+{
+  "name": "30-crypto-oidc-issuer-not-allowed",
+  "kind": "negative",
+  "description": "OIDC issuer claim is outside consumer allowlist",
+  "expected": "verify-reject",
+  "rejectStage": "crypto-verification",
+  "expectedErrorCode": "crypto.oidc_issuer_not_allowed",
+  "rejectPointer": "/verificationMaterial",
+  "invariants": [
+    "Q4.crypto"
+  ]
+}

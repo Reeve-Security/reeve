@@ -1,0 +1,13 @@
+{
+  "name": "35-policy-03-rule-a-deny",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "Policy fixture: explicit core declaration plus observed extra core capability. Policy #3 Rule A emits deny and stores policyVerdicts plus policy-verdict evidence in sidecar.",
+  "invariants": [
+    "Q1.a",
+    "Q2.e",
+    "Q3.h",
+    "Q5.ad"
+  ],
+  "notes": "This fixture is post-policy-evaluation form. validate only checks structural/canonical correctness; policy tests assert verdict semantics."
+}

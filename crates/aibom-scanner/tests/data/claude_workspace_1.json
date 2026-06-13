@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "repo-reader": {
+      "command": "node",
+      "args": ["/workspace/tools/repo-reader.js"]
+    },
+    "repo-shell": {
+      "command": "python3",
+      "args": ["-m", "repo_shell_mcp"]
+    }
+  }
+}

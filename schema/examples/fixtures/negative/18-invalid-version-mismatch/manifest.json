@@ -1,0 +1,11 @@
+{
+  "name": "18-invalid-version-mismatch",
+  "kind": "negative",
+  "expected": "schema-reject",
+  "rejectStage": "schema-validation",
+  "expectedErrorCode": "aibom.version_mismatch",
+  "rejectPointer": "/aibom/schemaVersion",
+  "invariants": ["Q2.f", "Q2.g"],
+  "description": "$schema URL references aibom-v0.1.0.json but aibom.schemaVersion declares \"0.2.0\". The two fields must agree. Per ADR-0002, $schema is an immutable URL identifier of the exact schema file and aibom.schemaVersion is the machine-readable version string; disagreement between them indicates a malformed or tampered document.",
+  "notes": "JSON Schema can enforce this alignment via a `const` or pattern constraint on aibom.schemaVersion tied to the $schema URL (rejectStage: schema-validation). If the schema cannot express the constraint directly, a downstream validator enforces it at version-negotiation stage. Either way, the document must not be accepted."
+}

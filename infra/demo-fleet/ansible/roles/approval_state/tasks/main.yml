@@ -1,0 +1,12 @@
+- name: Plant approval-state placeholder
+  ansible.builtin.copy:
+    dest: "{{ demo_home }}/.reeve-demo/approval-state.json"
+    mode: "0600"
+    content: |
+      {
+        "endpointId": "{{ endpoint_id }}",
+        "state": "fixture-placeholder",
+        "note": "Use real surface-specific approval fixtures when #167 coverage is expanded."
+      }
+  when: "'GP' in (demo_evidence_slots | default([]))"
+

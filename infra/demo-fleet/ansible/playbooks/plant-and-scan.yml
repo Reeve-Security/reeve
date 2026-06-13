@@ -1,0 +1,11 @@
+- name: Plant one Reeve demo endpoint and run scan
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Apply persona role
+      ansible.builtin.include_role:
+        name: "persona_{{ persona }}"
+
+    - name: Run Reeve scan
+      ansible.builtin.include_role:
+        name: scan_reeve

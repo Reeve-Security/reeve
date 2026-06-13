@@ -1,0 +1,5 @@
+linux_endpoints   = {}
+windows_endpoints = {}
+macos_endpoints   = {}
+artifact_bucket   = ""
+

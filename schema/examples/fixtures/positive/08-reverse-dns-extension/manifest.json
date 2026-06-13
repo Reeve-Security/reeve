@@ -1,0 +1,14 @@
+{
+  "name": "08-reverse-dns-extension",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "Extension capability id com.example.product:custom-op using the reverse-DNS namespace grammar from ADR-0005. Schema accepts this id because com.example.product has two or more DNS labels. Qualifier keys under the extension namespace (mode=enhanced) are freeform.",
+  "invariants": [
+    "Q1.a", "Q1.b",
+    "Q2.e", "Q2.f",
+    "Q3.h",
+    "Q4.n", "Q4.o", "Q4.p", "Q4.q", "Q4.r", "Q4.s", "Q4.t", "Q4.u",
+    "Q5.z", "Q5.ad", "Q5.ae", "Q5.af"
+  ],
+  "notes": "Policy #11 (no-unknown-extension-capability) evaluates 'warn' by default against this fixture because com.example.product is not in the default extension-namespace allowlist for v0.1 (only mcp is). Under the strict profile, Policy #11 evaluates 'deny'. Consumers that wish to trust com.example.product capabilities must explicitly add the namespace to their allowlist."
+}

@@ -1,0 +1,16 @@
+---
+- name: Create Claude Code config directory
+  ansible.builtin.file:
+    path: "{{ profile_home }}/.claude"
+    state: directory
+    owner: "{{ profile_user }}"
+    group: "{{ profile_user }}"
+    mode: "0700"
+
+- name: Seed Claude Code approval fixture
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/fixtures/approvals/claude-code-allow-deny.json"
+    dest: "{{ profile_home }}/.claude/settings.json"
+    owner: "{{ profile_user }}"
+    group: "{{ profile_user }}"
+    mode: "0600"

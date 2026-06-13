@@ -1,0 +1,13 @@
+{
+  "name": "28-invalid-canonicalization-byte-drift",
+  "kind": "negative",
+  "expected": "schema-reject",
+  "rejectStage": "canonicalization",
+  "expectedErrorCode": "canonicalization.byte_drift",
+  "rejectPointer": "",
+  "invariants": [
+    "Q3.h"
+  ],
+  "description": "Sidecar content is valid (passes schema-validation and semantic-validation) but the on-disk bytes are pretty-printed instead of JCS-canonical. Harness rejects at canonicalization stage when the file's raw bytes do not equal the output of the JCS canonicalizer for the parsed JSON value.",
+  "notes": "The defect is purely at the byte-representation layer. Parsing the file yields a JSON value that would pass all other stages; re-serializing via JCS produces different bytes, which fails the equality check. This is the core invariant from ADR-0003's distribution rule: the sidecar artifact referenced from CycloneDX MUST be stored and distributed as JCS-canonical bytes. A human-readable pretty copy is allowed only as a derived view, never as the artifact."
+}

@@ -1,0 +1,53 @@
+[
+  {
+    "name": "mac-empty",
+    "description": "Clean macOS endpoint with no seeded agent config.",
+    "agents": [],
+    "expected_aibom": {
+      "min_occurrences": {
+        "aibom": 1
+      }
+    }
+  },
+  {
+    "name": "mac-claude-desktop-only",
+    "description": "Knowledge-worker macOS endpoint with Claude Desktop MCP config.",
+    "agents": ["claude_desktop"],
+    "expected_aibom": {
+      "contains": ["claude-desktop-drive"]
+    }
+  },
+  {
+    "name": "mac-codex-app-only",
+    "description": "Knowledge-worker macOS endpoint with Codex App-compatible config.",
+    "agents": ["codex_cli"],
+    "expected_aibom": {
+      "contains": ["codex", "granted-permission"],
+      "min_occurrences": {
+        "granted-permission": 1
+      }
+    }
+  },
+  {
+    "name": "mac-mixed-nondev",
+    "description": "Non-developer macOS endpoint with Claude Desktop and Codex App shape.",
+    "agents": ["claude_desktop", "codex_cli"],
+    "expected_aibom": {
+      "contains": ["claude-desktop-drive", "codex", "granted-permission"],
+      "min_occurrences": {
+        "granted-permission": 1
+      }
+    }
+  },
+  {
+    "name": "mac-engineering-stack",
+    "description": "macOS engineering endpoint with Claude Code, Codex CLI, Cursor, and Claude Desktop.",
+    "agents": ["claude_code", "codex_cli", "cursor", "claude_desktop"],
+    "expected_aibom": {
+      "contains": ["claude", "codex", "cursor-linear", "granted-permission"],
+      "min_occurrences": {
+        "granted-permission": 1
+      }
+    }
+  }
+]

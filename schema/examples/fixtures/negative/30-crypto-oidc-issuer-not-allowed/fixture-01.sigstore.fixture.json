@@ -1,0 +1,28 @@
+{
+  "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+  "verificationMaterial": {
+    "certificate": {
+      "rawBytes": "FULCIO_CERT_PLACEHOLDER",
+      "oidcIssuer": "https://evil.example",
+      "oidcSubject": "repo:allowed/project"
+    },
+    "tlogEntries": [
+      {
+        "kindVersion": {
+          "kind": "dsse",
+          "version": "0.0.1"
+        }
+      }
+    ]
+  },
+  "dsseEnvelope": {
+    "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJwcmVkaWNhdGUiOnsiYXJ0aWZhY3RSb2xlcyI6eyJmaXh0dXJlLTAxLmFpYm9tLmpzb24iOiJhaWJvbS1zaWRlY2FyIiwiZml4dHVyZS0wMS5jZHguanNvbiI6ImN5Y2xvbmVkeCJ9LCJjYW5vbmljYWxpemF0aW9uIjoiUkZDODc4NS1KQ1MrYWlib20tYXJyYXktb3JkZXItdjAuMSIsInNjaGVtYVZlcnNpb24iOiIwLjEuMCJ9LCJwcmVkaWNhdGVUeXBlIjoiaHR0cHM6Ly9haWJvbS5leGFtcGxlL2F0dGVzdGF0aW9uL2FpYm9tL3YwLjEiLCJzdWJqZWN0IjpbeyJkaWdlc3QiOnsic2hhMjU2IjoiYWQ0YjAwZDE3ZmNkMWU4NTI3M2NhOWY1ZTVkNzRlMGI5MTk1NTc4OTFkMWY4ODY4YTVjZDBlODM4NDU4YmZiYyJ9LCJuYW1lIjoiZml4dHVyZS0wMS5haWJvbS5qc29uIn0seyJkaWdlc3QiOnsic2hhMjU2IjoiZTEwMzA2ZTYyMWI0MDI3NjdhMDMwYjI4ZGJmNTE1MDk4N2Q3NDI0YTMxNzA4YmM5MWU1ZjlmM2U2MTYyZDkzNyJ9LCJuYW1lIjoiZml4dHVyZS0wMS5jZHguanNvbiJ9XX0=",
+    "payloadType": "application/vnd.in-toto+json",
+    "signatures": [
+      {
+        "_fixture_note": "placeholder signature",
+        "sig": "FIXTURE_PLACEHOLDER_SIGNATURE"
+      }
+    ]
+  }
+}

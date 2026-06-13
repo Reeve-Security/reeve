@@ -1,0 +1,88 @@
+---
+- name: Wait for cloud-init to finish on the VPS
+  ansible.builtin.command: cloud-init status --wait
+  changed_when: false
+  register: cloud_init_wait
+  retries: 3
+  delay: 10
+  until: cloud_init_wait.rc == 0
+
+- name: Install runtime dependencies on Debian family
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - jq
+      - tar
+      - xz-utils
+    update_cache: true
+    state: present
+    lock_timeout: 300
+  when: ansible_os_family == "Debian"
+
+- name: Install runtime dependencies on Red Hat family
+  ansible.builtin.dnf:
+    name:
+      - ca-certificates
+      - curl
+      - jq
+      - tar
+      - xz
+    update_cache: true
+    state: present
+  when: ansible_os_family == "RedHat"
+
+- name: Install cosign
+  ansible.builtin.get_url:
+    url: https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64
+    dest: /usr/local/bin/cosign
+    mode: "0755"
+
+- name: Create remote staging directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ phase1_remote_dir }}"
+    - "{{ phase1_remote_dir }}/release"
+    - "{{ phase1_remote_dir }}/staging"
+
+- name: Copy signed release archive
+  ansible.builtin.copy:
+    src: "{{ reeve_release_archive_path }}"
+    dest: "{{ phase1_remote_dir }}/release/aibom-cli.tar.xz"
+    mode: "0644"
+
+- name: Copy release archive Sigstore bundle
+  ansible.builtin.copy:
+    src: "{{ reeve_release_bundle_path }}"
+    dest: "{{ phase1_remote_dir }}/release/aibom-cli.tar.xz.bundle"
+    mode: "0644"
+
+- name: Verify release archive signature
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/cosign
+      - verify-blob
+      - --bundle
+      - "{{ phase1_remote_dir }}/release/aibom-cli.tar.xz.bundle"
+      - --certificate-identity-regexp
+      - "{{ release_signer_identity_regexp }}"
+      - --certificate-oidc-issuer
+      - "{{ release_oidc_issuer }}"
+      - "{{ phase1_remote_dir }}/release/aibom-cli.tar.xz"
+  register: release_verify
+  changed_when: false
+
+- name: Extract release archive and stage executable
+  ansible.builtin.shell: |
+    set -euo pipefail
+    rm -rf "{{ phase1_remote_dir }}/extract"
+    mkdir -p "{{ phase1_remote_dir }}/extract"
+    tar -xJf "{{ phase1_remote_dir }}/release/aibom-cli.tar.xz" -C "{{ phase1_remote_dir }}/extract"
+    binary="$(find "{{ phase1_remote_dir }}/extract" -type f -name aibom-cli -perm -111 | head -1)"
+    test -n "${binary}"
+    install -m 0755 "${binary}" "{{ phase1_remote_dir }}/staging/aibom-cli"
+  args:
+    executable: /bin/bash

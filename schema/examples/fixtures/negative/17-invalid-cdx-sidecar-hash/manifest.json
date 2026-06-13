@@ -1,0 +1,11 @@
+{
+  "name": "17-invalid-cdx-sidecar-hash",
+  "kind": "negative",
+  "expected": "verify-reject",
+  "rejectStage": "hash-match",
+  "expectedErrorCode": "cdx.externalReferences.hash_mismatch",
+  "rejectPointer": "/components/0/externalReferences/0/hashes/0/content",
+  "invariants": ["Q1.b", "Q3.h"],
+  "description": "CycloneDX document's externalReferences[].hashes[].content does not equal sha256 of the canonical AIBOM sidecar bytes. Verifier rejects at hash-match stage per ADR-0001.",
+  "notes": "The AIBOM sidecar is a valid JCS-canonical document and passes schema-validation + canonicalization stages. The CycloneDX document itself is also valid CycloneDX 1.5. The failure is at hash-match: the externalReferences hash (all zeros) does not match the computed sha256 of the sidecar's canonical bytes (8eb298a912f29cbac119e937b75d3a836d80233655f1e097c231ee4cd24bba95). This fixture also covers the Q3 array-order violation class: if an emitter distributed a semantically-equivalent-but-non-canonical sidecar, the CDX hash (computed over canonical bytes) would fail the same way — exactly per ADR-0001's rule that the referenced artifact IS the canonical bytes."
+}

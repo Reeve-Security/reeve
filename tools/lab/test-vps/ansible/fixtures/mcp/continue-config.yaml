@@ -1,0 +1,6 @@
+mcpServers:
+  continue-docs:
+    command: npx
+    args:
+      - -y
+      - "@acme/mcp-docs@1.0.0"

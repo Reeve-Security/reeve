@@ -1,0 +1,44 @@
+[workspace]
+members = [
+  "crates/aibom-core",
+  "crates/aibom-validator",
+  "crates/aibom-cli",
+  "crates/aibom-scanner",
+  "crates/aibom-signer",
+  "crates/aibom-policy",
+]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+version = "0.3.8"
+license = "Apache-2.0"
+repository = "https://github.com/Reeve-Security/reeve"
+
+[workspace.dependencies]
+anyhow = "1.0"
+async-trait = "0.1"
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+clap = { version = "4.5", features = ["derive", "env"] }
+glob = "0.3"
+hex = "0.4"
+jsonschema = "0.30"
+flate2 = "1.0"
+opa-wasm = "0.2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+sha2 = "0.10"
+tar = "0.4"
+tempfile = "3.23"
+thiserror = "2.0"
+tokio = { version = "1", features = ["full"] }
+toml = "0.8"
+walkdir = "2.5"
+wasmtime = "36"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

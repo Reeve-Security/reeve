@@ -1,0 +1,27 @@
+---
+- name: Copy surface config
+  ansible.builtin.copy:
+    src: "{{ surface_config_path }}"
+    dest: "{{ phase1_remote_dir }}/staging/surfaces.yaml"
+    mode: "0644"
+
+- name: Copy surface config Sigstore bundle
+  ansible.builtin.copy:
+    src: "{{ surface_config_bundle_path }}"
+    dest: "{{ phase1_remote_dir }}/staging/surfaces.yaml.sigstore.json"
+    mode: "0644"
+
+- name: Verify surface config bundle before install
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/cosign
+      - verify-blob
+      - --bundle
+      - "{{ phase1_remote_dir }}/staging/surfaces.yaml.sigstore.json"
+      - --certificate-identity-regexp
+      - "{{ surface_signer_identity_regexp }}"
+      - --certificate-oidc-issuer
+      - "{{ release_oidc_issuer }}"
+      - "{{ phase1_remote_dir }}/staging/surfaces.yaml"
+  register: surface_verify
+  changed_when: false

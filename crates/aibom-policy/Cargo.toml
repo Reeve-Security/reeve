@@ -1,0 +1,20 @@
+[package]
+name = "aibom-policy"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+build = "build.rs"
+
+[dependencies]
+aibom-core = { path = "../aibom-core" }
+anyhow.workspace = true
+opa-wasm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+wasmtime.workspace = true
+
+[build-dependencies]
+serde_json.workspace = true
+sha2.workspace = true

@@ -1,0 +1,37 @@
+all:
+  hosts:
+    eng-linux-02:
+      ansible_connection: local
+      endpoint_id: eng-linux-02
+      platform: linux
+      persona: engineering
+      demo_home: /tmp/reeve-demo-fleet-ansible/eng-linux-02/home
+      demo_output_dir: /tmp/reeve-demo-fleet-ansible/eng-linux-02/out
+      demo_evidence_slots:
+        - MR
+        - TL
+        - PO
+        - SG
+    eng-linux-06:
+      ansible_connection: local
+      endpoint_id: eng-linux-06
+      platform: linux
+      persona: engineering
+      demo_home: /tmp/reeve-demo-fleet-ansible/eng-linux-06/home
+      demo_output_dir: /tmp/reeve-demo-fleet-ansible/eng-linux-06/out
+      demo_evidence_slots:
+        - MR
+        - SR
+        - SG
+    fin-win-03:
+      ansible_connection: local
+      endpoint_id: fin-win-03
+      platform: windows
+      persona: finance
+      demo_home: /tmp/reeve-demo-fleet-ansible/fin-win-03/home
+      demo_output_dir: /tmp/reeve-demo-fleet-ansible/fin-win-03/out
+      demo_vulnerable_slot: VV-01
+      demo_evidence_slots:
+        - MR
+        - VV-01
+        - SG

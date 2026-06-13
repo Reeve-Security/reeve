@@ -1,0 +1,19 @@
+- name: Apply sales demo persona
+  ansible.builtin.include_role:
+    name: mcp_catalog
+  vars:
+    demo_assistants:
+      - cursor
+      - codex-cli
+
+- name: Plant sales approvals
+  ansible.builtin.include_role:
+    name: approval_state
+
+- name: Plant sales secret fixtures
+  ansible.builtin.include_role:
+    name: planted_secrets
+
+- name: Plant sales vulnerable-version placeholders
+  ansible.builtin.include_role:
+    name: vulnerable_version_evidence

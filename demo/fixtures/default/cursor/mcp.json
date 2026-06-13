@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "repo-tools": {
+      "command": "uvx",
+      "args": ["repo-tools-mcp"]
+    },
+    "local-api": {
+      "url": "http://127.0.0.1:9999/sse"
+    }
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "emailAddress": "secret@example.com",
+  "cwd": "/Users/example/private",
+  "systemPrompt": "TOP_SECRET_SYSTEM_PROMPT",
+  "permissionMode": "default",
+  "enabledMcpTools": {
+    "desktop-commander.read_file": true,
+    "desktop-commander.delete_file": false,
+    "exa.web_search": {
+      "approved": true
+    }
+  },
+  "userSelectedFolders": [
+    "/Users/example/LegalDocs"
+  ],
+  "egressAllowedDomains": [
+    "https://api.example.com:443",
+    "intranet.example"
+  ],
+  "orgCliExecPolicies": [
+    "rm -rf /tmp/reeve-demo",
+    {
+      "command": "sudo launchctl list",
+      "approved": true
+    },
+    {
+      "command": "ignored",
+      "approved": false
+    }
+  ],
+  "remoteMcpServersConfig": [
+    {
+      "name": "EXA.ai",
+      "uuid": "e786afac-3991-4dc4-8334-68fdbf06aa9e",
+      "tools": [
+        {"name": "web_search_exa"},
+        {"name": "company_research_exa"}
+      ]
+    }
+  ]
+}

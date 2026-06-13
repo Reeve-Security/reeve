@@ -1,0 +1,46 @@
+- name: Ensure demo config directories exist
+  ansible.builtin.file:
+    path: "{{ demo_home }}/{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - .cursor
+    - .claude/projects/DemoProject
+    - .codex
+    - .reeve-demo
+
+- name: Plant Cursor MCP registration
+  ansible.builtin.copy:
+    dest: "{{ demo_home }}/.cursor/mcp.json"
+    mode: "0600"
+    content: |
+      {
+        "mcpServers": {
+          "demo-filesystem": {
+            "command": "/usr/bin/true"
+          }
+        }
+      }
+
+- name: Plant Codex CLI MCP registration
+  ansible.builtin.copy:
+    dest: "{{ demo_home }}/.codex/config.toml"
+    mode: "0600"
+    content: |
+      [mcp_servers.demo_filesystem]
+      command = "/usr/bin/true"
+
+- name: Plant endpoint metadata
+  ansible.builtin.copy:
+    dest: "{{ demo_home }}/.reeve-demo/endpoint.json"
+    mode: "0600"
+    content: |
+      {
+        "endpointId": "{{ endpoint_id }}",
+        "persona": "{{ persona }}",
+        "platform": "{{ platform }}",
+        "assistants": {{ demo_assistants | default([]) | to_json }},
+        "evidenceSlots": {{ demo_evidence_slots | default([]) | to_json }},
+        "safety": "metadata only; no exploit payloads"
+      }
+

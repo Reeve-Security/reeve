@@ -1,0 +1,16 @@
+---
+- name: Create Continue config directory
+  ansible.builtin.file:
+    path: "{{ profile_home }}/.continue"
+    state: directory
+    owner: "{{ profile_user }}"
+    group: "{{ profile_user }}"
+    mode: "0700"
+
+- name: Seed Continue MCP fixture
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/fixtures/mcp/continue-config.yaml"
+    dest: "{{ profile_home }}/.continue/config.yaml"
+    owner: "{{ profile_user }}"
+    group: "{{ profile_user }}"
+    mode: "0600"

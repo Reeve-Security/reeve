@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "vscode-github": {
+      "command": "npx",
+      "args": ["-y", "@github/mcp-server@0.3.0"]
+    }
+  }
+}

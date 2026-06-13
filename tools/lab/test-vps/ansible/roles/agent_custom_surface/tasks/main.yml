@@ -1,0 +1,16 @@
+---
+- name: Create custom surface directory
+  ansible.builtin.file:
+    path: "{{ profile_home }}/.phase1-agent"
+    state: directory
+    owner: "{{ profile_user }}"
+    group: "{{ profile_user }}"
+    mode: "0700"
+
+- name: Seed custom surface MCP fixture
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/fixtures/mcp/custom-surface-mcp.json"
+    dest: "{{ profile_home }}/.phase1-agent/mcp.json"
+    owner: "{{ profile_user }}"
+    group: "{{ profile_user }}"
+    mode: "0600"

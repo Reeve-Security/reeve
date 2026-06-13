@@ -1,0 +1,72 @@
+{
+  "advisories": [
+    {
+      "ghsa_id": "GHSA-9v6m-1111-left",
+      "cve_id": "CVE-2026-1111",
+      "summary": "left-pad 1.2.3 has a demonstrator GHSA vulnerability",
+      "severity": "high",
+      "identifiers": [
+        {
+          "type": "GHSA",
+          "value": "GHSA-9v6m-1111-left"
+        },
+        {
+          "type": "CVE",
+          "value": "CVE-2026-1111"
+        }
+      ],
+      "vulnerabilities": [
+        {
+          "package": {
+            "ecosystem": "npm",
+            "name": "left-pad"
+          },
+          "vulnerable_version_range": "= 1.2.3",
+          "first_patched_version": "1.2.4"
+        }
+      ]
+    },
+    {
+      "ghsa_id": "GHSA-7p9q-2222-reqs",
+      "summary": "requests stays vulnerable until 2.31.1",
+      "severity": "moderate",
+      "identifiers": [
+        {
+          "type": "GHSA",
+          "value": "GHSA-7p9q-2222-reqs"
+        }
+      ],
+      "vulnerabilities": [
+        {
+          "package": {
+            "ecosystem": "pip",
+            "name": "requests"
+          },
+          "vulnerable_version_range": ">= 0, < 2.31.1",
+          "first_patched_version": "2.31.1"
+        }
+      ]
+    },
+    {
+      "ghsa_id": "GHSA-3c4d-3333-click",
+      "summary": "click only becomes vulnerable after the clean fixture version",
+      "severity": "low",
+      "identifiers": [
+        {
+          "type": "GHSA",
+          "value": "GHSA-3c4d-3333-click"
+        }
+      ],
+      "vulnerabilities": [
+        {
+          "package": {
+            "ecosystem": "pip",
+            "name": "click"
+          },
+          "vulnerable_version_range": ">= 8.2.0",
+          "first_patched_version": null
+        }
+      ]
+    }
+  ]
+}

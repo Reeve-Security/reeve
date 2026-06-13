@@ -1,0 +1,11 @@
+{
+  "name": "14-invalid-empty-evidence",
+  "kind": "negative",
+  "expected": "schema-reject",
+  "rejectStage": "schema-validation",
+  "expectedErrorCode": "capability.evidence.min_items",
+  "rejectPointer": "/aibom/components/0/capabilities/declared/0/evidence",
+  "invariants": ["Q5.ad"],
+  "description": "Capability's evidence[] is empty. Per ADR-0005, minItems: 1 is required — a capability with no evidence reference is a claim without provenance, which is exactly what Reeve exists to prevent.",
+  "notes": "Both declared and observed capabilities must cite at least one evidence record. Declared capabilities cite the source schema fragment (e.g., MCP tools/list entry); observed cite the sandbox trace entry."
+}

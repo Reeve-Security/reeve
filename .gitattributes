@@ -1,0 +1,5 @@
+# Policy bundle artifacts are hashed byte-for-byte by crates/aibom-policy/build.rs.
+# Keep them out of platform newline conversion so Windows release builds see
+# the same committed bytes as Linux/macOS.
+crates/aibom-policy/bundles/*.json -text
+crates/aibom-policy/bundles/*.wasm -text

@@ -1,0 +1,13 @@
+[mcp_servers.codex_lab_shell]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-shell"]
+
+[projects."/workspace"]
+approval_policy = "danger_full_access"
+sandbox_mode = "workspace-write"
+
+[apps.shell.tools."rm -rf"]
+approval_mode = "always"
+
+[apps.shell.tools."curl | sh"]
+approval_mode = "always"

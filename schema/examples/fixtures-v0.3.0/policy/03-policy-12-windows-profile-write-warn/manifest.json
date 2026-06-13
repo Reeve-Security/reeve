@@ -1,0 +1,11 @@
+{
+  "name": "03-policy-12-windows-profile-write-warn",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "v0.3.0 policy fixture: Windows user-profile filesystem write grant is valid schema and should be flagged by Policy #12.",
+  "invariants": [
+    "ADR-0025.a",
+    "ADR-0025.d"
+  ],
+  "schemaVersion": "0.3.0"
+}

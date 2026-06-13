@@ -1,0 +1,276 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gitleaks:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
+    name: gitleaks
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          VERSION="8.24.2"
+          curl -fsSL -o gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz"
+          tar -xzf gitleaks.tar.gz gitleaks
+          chmod +x gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: gitleaks detect
+        run: |
+          set -euo pipefail
+          mkdir -p gitleaks-reports
+          report="gitleaks-reports/detect.json"
+          set +e
+          gitleaks detect \
+            --source . \
+            --verbose \
+            --redact \
+            --config .gitleaks.toml \
+            --report-format json \
+            --report-path "${report}"
+          status="$?"
+          set -e
+          {
+            echo "## gitleaks detect"
+            echo
+            echo "- config: \`.gitleaks.toml\`"
+            echo "- report: \`${report}\`"
+            echo "- redacted: yes"
+            echo "- status: \`${status}\`"
+            echo
+          } >> "${GITHUB_STEP_SUMMARY}"
+          if [ "${status}" -ne 0 ]; then
+            echo "::error::gitleaks found potential leaks"
+            python3 - "${report}" "${GITHUB_STEP_SUMMARY}" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          report = pathlib.Path(sys.argv[1])
+          summary = pathlib.Path(sys.argv[2])
+          try:
+              findings = json.loads(report.read_text())
+          except Exception as exc:
+              raise SystemExit(f"failed to read gitleaks JSON report: {exc}")
+
+          lines = [
+              "### Findings",
+              "",
+              "| Rule | File | Line | Commit | Description |",
+              "|---|---|---:|---|---|",
+          ]
+          for finding in findings:
+              rule = finding.get("RuleID", "<unknown>")
+              path = finding.get("File", "<unknown>")
+              line = finding.get("StartLine", "<unknown>")
+              commit = finding.get("Commit", "")
+              description = finding.get("Description", "")
+              secret = finding.get("Secret", "")
+              match = finding.get("Match", "")
+              print(
+                  f"gitleaks finding: rule={rule} file={path} line={line} "
+                  f"commit={commit} description={description} "
+                  f"secret_redacted={bool(secret)} match_redacted={bool(match)}"
+              )
+              lines.append(
+                  f"| `{rule}` | `{path}` | {line} | `{commit}` | {description} |"
+              )
+          summary.open("a").write("\n".join(lines) + "\n")
+          PY
+            exit "${status}"
+          fi
+
+      - name: Upload gitleaks report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-report
+          path: gitleaks-reports/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: gitleaks positive control
+        run: |
+          set -euo pipefail
+          tmp_dir="$(mktemp -d)"
+          trap 'rm -rf "${tmp_dir}"' EXIT
+          token_prefix='hcc_'
+          printf 'HCLOUD_TOKEN=%s%032d\n' "${token_prefix}" 1234567890 > "${tmp_dir}/leak.env"
+          set +e
+          gitleaks dir "${tmp_dir}" \
+            --redact \
+            --config .gitleaks.toml \
+            --report-format json \
+            --report-path "${tmp_dir}/report.json"
+          status="$?"
+          set -e
+          if [ "${status}" -eq 0 ]; then
+            echo "expected gitleaks to reject fake Hetzner token" >&2
+            exit 1
+          fi
+          if ! grep -Eq '"RuleID"[[:space:]]*:[[:space:]]*"hetzner-cloud-token"' "${tmp_dir}/report.json"; then
+            echo "expected fake Hetzner token to match hetzner-cloud-token rule" >&2
+            cat "${tmp_dir}/report.json" >&2
+            exit 1
+          fi
+
+  check:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
+    name: check (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON('{"include":[{"os":"ubuntu","runner":"blacksmith-4vcpu-ubuntu-2404"},{"os":"macos","runner":"blacksmith-6vcpu-macos-latest"}]}') }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-${{ matrix.os }}
+
+      - name: Install OPA
+        run: |
+          set -euo pipefail
+          OPA_VERSION="1.15.2"
+          case "${RUNNER_OS}-$(uname -m)" in
+            Linux-x86_64)
+              OPA_ASSET="opa_linux_amd64_static"
+              OPA_SHA256="a9d9481e463e7af8cb1a2cd7c3deb764f0327b3281c54e632546c2f425fc0824"
+              ;;
+            Linux-aarch64|Linux-arm64)
+              OPA_ASSET="opa_linux_arm64_static"
+              OPA_SHA256="6651bf5a80cfec6ba6a2d3b6a550b8f748d9cade1c74d54b5f854782f9bea67a"
+              ;;
+            macOS-arm64)
+              OPA_ASSET="opa_darwin_arm64"
+              OPA_SHA256="0622a4ecce925594a240484e773eee2773c55627cc9bdaae885e8bb2a74673e2"
+              ;;
+            macOS-x86_64)
+              OPA_ASSET="opa_darwin_amd64"
+              OPA_SHA256="34db678edd97adf6f0b4ed7cb20c2d1e81e7ab793e5ca6f08e734c0473c47b8e"
+              ;;
+            *)
+              echo "unsupported runner/architecture: ${RUNNER_OS}-$(uname -m)" >&2
+              exit 1
+              ;;
+          esac
+          curl -fsSL -o opa "https://openpolicyagent.org/downloads/v${OPA_VERSION}/${OPA_ASSET}"
+          echo "${OPA_SHA256}  opa" | shasum -a 256 --check
+          chmod +x opa
+          sudo mv opa /usr/local/bin/opa
+          opa version
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.8.1
+
+      - name: Install Linux trace tooling
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y strace
+          strace -V
+
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test --workspace
+
+      - name: launch proof markers
+        run: python3 scripts/launch-test-gate.py --markers-only
+
+      - name: policy bundle provenance
+        run: |
+          python3 scripts/check-policy-bundle-provenance.py
+          bash scripts/build-policy-bundle.sh --check
+
+      - name: fixture regenerator idempotency
+        run: |
+          python3 schema/examples/tools/regenerate.py
+          git diff --exit-code schema/examples/fixtures/
+
+      - name: release signing contract
+        run: python3 scripts/check-release-signing.py
+
+      - name: windows release Track 0 contract
+        run: python3 scripts/check-windows-release-track0.py
+
+      - name: windows release Track 1 contract
+        run: python3 scripts/check-windows-release-track1.py
+
+      - name: windows discovery Track 2 contract
+        run: python3 scripts/check-windows-discovery-track2.py
+
+      - name: windows profiling Track 3 contract
+        run: python3 scripts/check-windows-profiling-track3.py
+
+      - name: sigstore-rs deferral contract
+        run: python3 scripts/check-sigstore-rs-deferral.py
+
+      - name: surface config signing contract
+        run: python3 scripts/check-surface-config-signing.py
+
+      - name: deployment template contract
+        run: python3 scripts/check-deploy-templates.py
+
+      - name: filesystem scope docs contract
+        run: python3 scripts/check-scope-docs.py
+
+      - name: lab infra docs contract
+        run: python3 scripts/check-lab-infra-docs.py
+
+      - name: demo fleet upload dry-run contract
+        run: bash infra/demo-fleet/scripts/test-upload-artifacts.sh
+
+      - name: Phase 1 VPS lab contract
+        run: python3 scripts/check-test-vps-lab.py
+
+      - name: macOS Tart lab contract
+        run: python3 scripts/check-test-mac-lab.py
+
+      - name: adapter roadmap contract
+        run: python3 scripts/check-adapter-roadmap.py
+
+      - name: private boundary contract
+        run: python3 scripts/check-private-boundary.py
+
+      - name: tools OSS readiness contract
+        run: python3 scripts/check-tools-oss-readiness.py
+
+      - name: release sensitive-data flags contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifacts_dir="$(mktemp -d)"
+          stage_dir="$(mktemp -d)"
+          trap 'rm -rf "${artifacts_dir}" "${stage_dir}"' EXIT
+          archive_root="${stage_dir}/aibom-cli-x86_64-unknown-linux-gnu"
+          mkdir -p "${archive_root}"
+          cp target/debug/aibom-cli "${archive_root}/aibom-cli"
+          chmod +x "${archive_root}/aibom-cli"
+          tar -C "${stage_dir}" -cJf "${artifacts_dir}/aibom-cli-x86_64-unknown-linux-gnu.tar.xz" \
+            aibom-cli-x86_64-unknown-linux-gnu
+          python3 scripts/check-release-sensitive-data-flags.py "${artifacts_dir}"
+
+      - name: release readiness runner
+        run: bash scripts/release-readiness.sh

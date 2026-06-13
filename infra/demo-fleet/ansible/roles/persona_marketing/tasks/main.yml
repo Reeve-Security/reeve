@@ -1,0 +1,19 @@
+- name: Apply marketing demo persona
+  ansible.builtin.include_role:
+    name: mcp_catalog
+  vars:
+    demo_assistants:
+      - claude-desktop
+      - cursor
+
+- name: Plant marketing approvals
+  ansible.builtin.include_role:
+    name: approval_state
+
+- name: Plant marketing secret fixtures
+  ansible.builtin.include_role:
+    name: planted_secrets
+
+- name: Plant marketing vulnerable-version placeholders
+  ansible.builtin.include_role:
+    name: vulnerable_version_evidence

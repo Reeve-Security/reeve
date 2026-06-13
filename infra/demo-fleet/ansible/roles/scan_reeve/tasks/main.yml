@@ -1,0 +1,30 @@
+- name: Ensure output directory exists
+  ansible.builtin.file:
+    path: "{{ demo_output_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: Run local Reeve fixture scan
+  ansible.builtin.command:
+    argv:
+      - cargo
+      - run
+      - -q
+      - -p
+      - aibom-cli
+      - --
+      - scan
+      - --no-system-config
+      - --target
+      - "{{ demo_home }}"
+      - --output-dir
+      - "{{ demo_output_dir }}"
+      - --sign-mode
+      - fixture
+      - --include-conversation-metadata
+      - --scan-conversation-secrets
+  args:
+    chdir: "{{ playbook_dir }}/../../../.."
+  changed_when: true
+  when: not ansible_check_mode
+

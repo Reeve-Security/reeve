@@ -1,0 +1,27 @@
+[features]
+plugins = true
+
+[marketplaces.openai-bundled]
+last_updated = "2026-05-17T23:21:33Z"
+source_type = "local"
+source = "/Users/testuser/.codex/.tmp/bundled-marketplaces/openai-bundled"
+
+[marketplaces.openai-primary-runtime]
+last_updated = "2026-05-18T00:12:46Z"
+source_type = "local"
+source = "/Users/testuser/.cache/codex-runtimes/codex-primary-runtime/plugins/openai-primary-runtime"
+
+[plugins."browser@openai-bundled"]
+enabled = true
+
+[plugins."computer-use@openai-bundled"]
+enabled = true
+
+[plugins."documents@openai-primary-runtime"]
+enabled = true
+
+[plugins."spreadsheets@openai-primary-runtime"]
+enabled = false
+
+[projects."/Users/testuser/projects/secret-client-work"]
+trust_level = "trusted"

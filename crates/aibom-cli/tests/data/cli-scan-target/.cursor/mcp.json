@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "fixture-true": {
+      "command": "/usr/bin/true"
+    },
+    "fixture-cat": {
+      "command": "/bin/cat"
+    }
+  }
+}

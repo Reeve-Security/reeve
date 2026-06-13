@@ -1,0 +1,55 @@
+name: Windows release Track 0
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/windows-release-track0.yml"
+      - "dist-workspace.toml"
+      - "docs/decisions/0014-windows-release-track0.md"
+      - "scripts/check-windows-release-track0.py"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "crates/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cargo-dist-windows:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
+    name: cargo-dist windows target
+    runs-on: blacksmith-4vcpu-windows-2025
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: windows-release-track0
+
+      - name: Install cargo-dist
+        shell: pwsh
+        run: irm https://github.com/axodotdev/cargo-dist/releases/download/v0.31.0/cargo-dist-installer.ps1 | iex
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.8.1
+
+      - name: Verify toolchain
+        shell: pwsh
+        run: |
+          rustc --version
+          cargo --version
+          dist --version
+          cosign version
+
+      - name: Run Windows scanner tests
+        shell: pwsh
+        run: cargo test -p aibom-scanner windows_
+
+      - name: Build Windows cargo-dist artifact
+        shell: pwsh
+        run: dist build --allow-dirty --print=linkage --output-format=json --artifacts=local --target=x86_64-pc-windows-msvc

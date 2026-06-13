@@ -1,0 +1,13 @@
+- name: Plant vulnerable-version placeholder
+  ansible.builtin.copy:
+    dest: "{{ demo_home }}/.reeve-demo/vulnerable-version.json"
+    mode: "0600"
+    content: |
+      {
+        "endpointId": "{{ endpoint_id }}",
+        "slot": "{{ demo_vulnerable_slot | default('VV-unassigned') }}",
+        "publicNameAllowed": false,
+        "note": "No named CVE/advisory until primary source verification pins the exact label."
+      }
+  when: "demo_vulnerable_slot is defined"
+

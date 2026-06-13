@@ -1,0 +1,34 @@
+{
+  "emailAddress": "desktop-secret@example.com",
+  "cwd": "/Users/example/private",
+  "sessionType": "scheduled",
+  "scheduledTaskId": "daily-pdf-archive",
+  "permissionMode": "default",
+  "enabledMcpTools": {
+    "desktop-commander.read_file": true
+  },
+  "alwaysAllowedReasons": {
+    "filesystem.write_file": {
+      "approved": true,
+      "reason": "user selected always allow"
+    }
+  },
+  "sessionPermissionUpdates": [
+    {
+      "toolName": "shell.run",
+      "allowed": true
+    }
+  ],
+  "userSelectedFolders": [
+    "/Users/example/LegalDocs"
+  ],
+  "remoteMcpServersConfig": [
+    {
+      "name": "Desktop Commander",
+      "uuid": "a1111111-2222-4333-8444-555555555555",
+      "tools": [
+        {"name": "read_file"}
+      ]
+    }
+  ]
+}

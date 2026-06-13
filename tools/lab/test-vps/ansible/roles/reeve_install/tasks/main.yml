@@ -1,0 +1,6 @@
+---
+- name: Prepare release inputs
+  ansible.builtin.import_tasks: release.yml
+
+- name: Install staged release
+  ansible.builtin.import_tasks: install.yml

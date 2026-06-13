@@ -1,0 +1,11 @@
+{
+  "name": "25-invalid-capability-dangling-evidence",
+  "kind": "negative",
+  "expected": "schema-reject",
+  "rejectStage": "semantic-validation",
+  "expectedErrorCode": "aibom.evidence_ref.dangling_reference",
+  "rejectPointer": "/aibom/components/0/capabilities/declared/0/evidence/0",
+  "invariants": ["Q5.ad"],
+  "description": "A capability's evidence[] references id 'ev-dangling' which does not appear in the top-level aibom.evidence[] ledger. Harness rejects at semantic-validation.",
+  "notes": "Evidence references must resolve to records in the ledger. Dangling references mean the capability has no substantiation, which defeats the ADR-0005 evidence:minItems:1 rule at a semantic level even though the array itself is non-empty. Harness checks every capability.evidence[] id against the ledger after schema-validation confirms structural shape."
+}

@@ -1,0 +1,15 @@
+---
+- name: Copy curl-install template
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../../deploy/curl-install/install.sh"
+    dest: "{{ phase1_remote_dir }}/install.sh"
+    mode: "0755"
+
+- name: Run deployment template with real system paths
+  ansible.builtin.command: "{{ phase1_remote_dir }}/install.sh"
+  environment:
+    REEVE_BINARY_URL: "file://{{ phase1_remote_dir }}/staging/aibom-cli"
+    REEVE_SURFACE_CONFIG_URL: "file://{{ phase1_remote_dir }}/staging/surfaces.yaml"
+    REEVE_SURFACE_CONFIG_BUNDLE_URL: "file://{{ phase1_remote_dir }}/staging/surfaces.yaml.sigstore.json"
+    REEVE_SIGNER_IDENTITY_REGEXP: "{{ surface_signer_identity_regexp }}"
+  register: install_result

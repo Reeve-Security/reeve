@@ -1,0 +1,14 @@
+{
+  "name": "06-secret-read",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "secret:read capability with opaque ref qualifier (env:BRAVE_SEARCH_API_KEY). Tests ADR-0005's never-the-secret-value rule: qualifier carries an identifier, never the secret bytes.",
+  "invariants": [
+    "Q1.a", "Q1.b",
+    "Q2.e", "Q2.f",
+    "Q3.h",
+    "Q4.n", "Q4.o", "Q4.p", "Q4.q", "Q4.r", "Q4.s", "Q4.t", "Q4.u",
+    "Q5.w", "Q5.x", "Q5.ai", "Q5.ad", "Q5.ae", "Q5.af"
+  ],
+  "notes": "The secret ref format (env:<NAME>) is a convention, not enforced by schema. Other valid forms documented in ADR-0005: file paths, store-specific URIs. Reeve MUST NOT emit the resolved secret value — ever. Evidence record ev-002 (sandbox-syscall getenv) captures the access event, not the returned string."
+}

@@ -1,0 +1,13 @@
+{
+  "name": "39-policy-05-maximum-scan-age-deny",
+  "kind": "positive",
+  "expected": "schema-valid",
+  "description": "Policy fixture: scan timestamp is older than configured maximum age. Policy #5 emits deny.",
+  "invariants": [
+    "Q1.a",
+    "Q2.e",
+    "Q3.h",
+    "Q5.ad"
+  ],
+  "notes": "Uses aibom.scan.timestamp, the canonical v0.1 scan timestamp field."
+}

@@ -1,0 +1,178 @@
+[
+  {
+    "name": "empty-ubuntu-24",
+    "description": "Clean Ubuntu 24.04 endpoint with no seeded agent config.",
+    "image": "ubuntu-24.04",
+    "server_type": "cpx11",
+    "location": "ash",
+    "agents": [],
+    "expected_aibom": {
+      "min_occurrences": {
+        "aibom": 1
+      }
+    }
+  },
+  {
+    "name": "claude-code-approvals-ubuntu-22",
+    "description": "Ubuntu 22.04 endpoint with Claude Code approval fixture.",
+    "image": "ubuntu-22.04",
+    "server_type": "cpx11",
+    "location": "ash",
+    "agents": ["claude_code"],
+    "expected_aibom": {
+      "contains": ["claude", "granted-permission"],
+      "min_occurrences": {
+        "granted-permission": 1
+      }
+    }
+  },
+  {
+    "name": "codex-cli-approvals-ubuntu-22",
+    "description": "Ubuntu 22.04 endpoint with Codex CLI approval fixture.",
+    "image": "ubuntu-22.04",
+    "server_type": "cpx11",
+    "location": "ash",
+    "agents": ["codex_cli"],
+    "expected_aibom": {
+      "contains": ["codex", "granted-permission"],
+      "min_occurrences": {
+        "granted-permission": 1
+      }
+    }
+  },
+  {
+    "name": "codex-app-config-ubuntu-24",
+    "description": "Ubuntu 24.04 endpoint with Codex App-compatible config shape.",
+    "image": "ubuntu-24.04",
+    "server_type": "cpx11",
+    "location": "ash",
+    "agents": ["codex_cli"],
+    "expected_aibom": {
+      "contains": ["codex", "granted-permission"],
+      "min_occurrences": {
+        "granted-permission": 1
+      }
+    }
+  },
+  {
+    "name": "dev-stack-ubuntu-24",
+    "description": "Ubuntu 24.04 endpoint with common developer MCP stack.",
+    "image": "ubuntu-24.04",
+    "server_type": "cpx11",
+    "location": "ash",
+    "agents": ["claude_code", "codex_cli", "cursor", "vscode", "continue", "zed"],
+    "expected_aibom": {
+      "contains": [
+        "claude",
+        "codex",
+        "cursor-linear",
+        "vscode-github",
+        "continue-docs",
+        "zed-notebooks"
+      ],
+      "min_occurrences": {
+        "granted-permission": 1
+      }
+    }
+  },
+  {
+    "name": "debian-12-claude-codex",
+    "description": "Debian 12 endpoint with Claude Code and Codex CLI.",
+    "image": "debian-12",
+    "server_type": "cpx11",
+    "location": "ash",
+    "agents": ["claude_code", "codex_cli"],
+    "expected_aibom": {
+      "contains": ["claude", "codex", "granted-permission"],
+      "min_occurrences": {
+        "granted-permission": 1
+      }
+    }
+  },
+  {
+    "name": "fedora-43-cursor",
+    "description": "Fedora 43 endpoint with Cursor MCP config.",
+    "image": "fedora-43",
+    "server_type": "cpx11",
+    "location": "ash",
+    "agents": ["cursor"],
+    "expected_aibom": {
+      "contains": ["cursor-linear"]
+    }
+  },
+  {
+    "name": "fedora-43-codex-cli",
+    "description": "Fedora 43 endpoint with Codex CLI approval fixture.",
+    "image": "fedora-43",
+    "server_type": "cpx11",
+    "location": "ash",
+    "agents": ["codex_cli"],
+    "expected_aibom": {
+      "contains": ["codex", "granted-permission"],
+      "min_occurrences": {
+        "granted-permission": 1
+      }
+    }
+  },
+  {
+    "name": "rocky-9-claude-code",
+    "description": "Rocky 9 enterprise Linux endpoint with Claude Code grants.",
+    "image": "rocky-9",
+    "server_type": "cpx11",
+    "location": "ash",
+    "agents": ["claude_code"],
+    "expected_aibom": {
+      "contains": ["claude", "granted-permission"],
+      "min_occurrences": {
+        "granted-permission": 1
+      }
+    }
+  },
+  {
+    "name": "custom-surface-ubuntu-24",
+    "description": "Ubuntu 24.04 endpoint with only signed custom-surface config.",
+    "image": "ubuntu-24.04",
+    "server_type": "cpx11",
+    "location": "ash",
+    "agents": ["custom_surface"],
+    "expected_aibom": {
+      "contains": ["phase1-custom-agent"]
+    }
+  },
+  {
+    "name": "deny-list-dominant-ubuntu-24",
+    "description": "Ubuntu 24.04 endpoint with deny-heavy Claude Code approval fixture plus risky allow entries.",
+    "image": "ubuntu-24.04",
+    "server_type": "cpx11",
+    "location": "ash",
+    "agents": ["claude_code_deny"],
+    "expected_aibom": {
+      "contains": ["claude", "granted-permission", "curl", "rm"],
+      "min_occurrences": {
+        "granted-permission": 1
+      }
+    }
+  },
+  {
+    "name": "claude-desktop-config-ubuntu-24",
+    "description": "Ubuntu 24.04 knowledge-worker endpoint with Claude Desktop MCP config and no CLI agents.",
+    "image": "ubuntu-24.04",
+    "server_type": "cpx11",
+    "location": "ash",
+    "agents": ["claude_desktop"],
+    "expected_aibom": {
+      "contains": ["claude-desktop-drive"]
+    }
+  },
+  {
+    "name": "mixed-nondev-ubuntu-24",
+    "description": "Ubuntu 24.04 non-developer endpoint with Continue, VS Code, and Factory MCP configs.",
+    "image": "ubuntu-24.04",
+    "server_type": "cpx11",
+    "location": "ash",
+    "agents": ["continue", "vscode", "factory"],
+    "expected_aibom": {
+      "contains": ["continue-docs", "vscode-github", "factory-review"]
+    }
+  }
+]
