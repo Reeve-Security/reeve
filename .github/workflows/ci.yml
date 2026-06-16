@@ -1,10 +1,29 @@
 name: ci
 
+# Doc-only pushes (README + legal docs + docs/) skip CI to avoid paying for a
+# full Blacksmith build/test matrix on a prose change. Contract-checked docs
+# (schema/error-codes.md, SPEC.md, CONTRIBUTING.md, policies/README.md, tools/**)
+# and the .gitignore boundary are intentionally NOT ignored, so a change that
+# can break a CI contract still runs.
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+      - 'CODE_OF_CONDUCT.md'
+      - 'CLA.md'
+      - 'SECURITY.md'
+      - 'docs/**'
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'README.md'
+      - 'LICENSE'
+      - 'CODE_OF_CONDUCT.md'
+      - 'CLA.md'
+      - 'SECURITY.md'
+      - 'docs/**'
   workflow_dispatch:
 
 permissions:
