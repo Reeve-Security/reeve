@@ -66,12 +66,17 @@ Or download the zip from the
 Scan an endpoint (reads config files only; does not run agents):
 
 ```bash
-aibom-cli scan --policy-check --output-dir ./reeve-out
+aibom-cli scan --policy-check --output-dir ./reeve-out --sign-mode fixture
 ```
 
-No flag is required. By default, Reeve scans your home directory and writes
-to `./out`. Use `--target` and `--output-dir` to choose different paths. The
-output directory is created if missing; existing files are not overwritten.
+By default Reeve scans your home directory and writes to `./out`; use
+`--target` and `--output-dir` to choose different paths. The output directory
+is created if missing and existing files are not overwritten.
+
+`--sign-mode fixture` keeps this first run offline and instant: it writes a
+placeholder signature bundle instead of calling `cosign`. For real Sigstore
+signatures, use `--sign-mode real` where a signing identity is configured
+(see [Verify your download](#verify-your-download)).
 
 On a shared machine, point `--target` at a parent like `/Users` or
 `C:\Users` to scan every immediate child home in one run. Reeve checks known
