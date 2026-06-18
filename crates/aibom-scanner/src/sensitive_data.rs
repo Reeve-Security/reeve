@@ -20,6 +20,13 @@ const DEFAULT_RULE_PACK_ID: &str = "reeve-default-conversation-secrets";
 const DEFAULT_RULE_PACK_VERSION: &str = "2026.06.0";
 const DEFAULT_RULE_PACK_CANONICAL: &str = "reeve-default-conversation-secrets@2026.06.0:anthropic-api-key,aws-access-key,jwt,oauth-client-secret,openai-api-key,private-key-pem,stripe-key";
 const MIN_SECRET_BODY_ENTROPY: f64 = 2.5;
+// Bound memory for the conversation content scan so a single huge file or a
+// flood of medium files cannot exhaust RAM or stall a fleet/MDM scan (#6).
+// Files over the per-file cap are skipped without ever being read into memory.
+// Once the cumulative read budget is exhausted the scan stops reading further
+// files and records that it was truncated.
+const MAX_CONVERSATION_FILE_BYTES: u64 = 16 * 1024 * 1024;
+const MAX_CONVERSATION_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
 const KNOWN_PLACEHOLDER_SECRET_TOKENS: &[&str] =
     &["AKIAIOSFODNN7EXAMPLE", "AKIAIOSFODNN7EXAMPLEFAKE"];
 const PLACEHOLDER_SECRET_MARKERS: &[&str] = &["example", "dummy", "placeholder", "fake"];
@@ -223,6 +230,55 @@ struct PatternFinding {
     suppression_id: Option<String>,
 }
 
+// Non-fatal notice that a conversation file was not read during the content
+// scan. Surfaced in the report so a skip is auditable telemetry, not a silent
+// drop. Carries only the redacted path and size, never file content (#6).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SkippedFile {
+    surface: &'static str,
+    redacted_path: String,
+    size_bytes: u64,
+    reason: SkipReason,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SkipReason {
+    FileTooLarge,
+    TotalBudgetExceeded,
+}
+
+impl SkipReason {
+    fn as_str(self) -> &'static str {
+        match self {
+            SkipReason::FileTooLarge => "file-too-large",
+            SkipReason::TotalBudgetExceeded => "total-budget-exceeded",
+        }
+    }
+}
+
+// Per-scan memory bounds. Overridable so a hermetic test can exercise the skip
+// path with a small file instead of writing hundreds of megabytes (#6).
+#[derive(Debug, Clone, Copy)]
+struct ConversationScanLimits {
+    max_file_bytes: u64,
+    max_total_bytes: u64,
+}
+
+impl Default for ConversationScanLimits {
+    fn default() -> Self {
+        Self {
+            max_file_bytes: MAX_CONVERSATION_FILE_BYTES,
+            max_total_bytes: MAX_CONVERSATION_TOTAL_BYTES,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+struct ConversationScanResult {
+    findings: Vec<PatternFinding>,
+    skipped: Vec<SkippedFile>,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct BuiltInSecretRule {
     pattern_class: &'static str,
@@ -391,11 +447,11 @@ pub fn write_sensitive_data_report(
     } else {
         Vec::new()
     };
-    let findings = if options.scan_conversation_secrets {
+    let scan_result = if options.scan_conversation_secrets {
         scan_conversation_findings(&target.root, &rules, &suppressions)
             .with_context(|| format!("scan conversation secrets {}", target.root.display()))?
     } else {
-        Vec::new()
+        ConversationScanResult::default()
     };
     let report_id = format!("sdr-{scan_id}");
     let filename = format!("{scan_id}.sensitive-data.json");
@@ -405,7 +461,8 @@ pub fn write_sensitive_data_report(
         timestamp,
         target,
         surfaces: &surfaces,
-        findings: &findings,
+        findings: &scan_result.findings,
+        skipped: &scan_result.skipped,
         options,
         customer_rule_pack: customer_rule_pack.as_ref(),
     })?;
@@ -511,8 +568,24 @@ fn scan_conversation_findings(
     target_root: &Path,
     rules: &[CompiledSecretRule],
     suppressions: &[SuppressionSpec],
-) -> Result<Vec<PatternFinding>> {
+) -> Result<ConversationScanResult> {
+    scan_conversation_findings_with_limits(
+        target_root,
+        rules,
+        suppressions,
+        ConversationScanLimits::default(),
+    )
+}
+
+fn scan_conversation_findings_with_limits(
+    target_root: &Path,
+    rules: &[CompiledSecretRule],
+    suppressions: &[SuppressionSpec],
+    limits: ConversationScanLimits,
+) -> Result<ConversationScanResult> {
     let mut findings = Vec::new();
+    let mut skipped = Vec::new();
+    let mut total_read_bytes: u64 = 0;
     for resolved in resolved_conversation_roots(target_root)? {
         let root = resolved.root;
         let root_path = resolved.path;
@@ -525,7 +598,32 @@ fn scan_conversation_findings(
                 continue;
             }
             let metadata = entry.metadata()?;
+            let file_size = metadata.len();
+            // Guard memory BEFORE reading. An oversized file is recorded as a
+            // skip and never loaded; reading it could exhaust RAM (#6).
+            if file_size > limits.max_file_bytes {
+                skipped.push(SkippedFile {
+                    surface: root.surface,
+                    redacted_path: redacted_file_path(entry.path(), &root_path, root),
+                    size_bytes: file_size,
+                    reason: SkipReason::FileTooLarge,
+                });
+                continue;
+            }
+            // A flood of in-range files must not exhaust memory either. Once
+            // the cumulative read budget would be exceeded, stop reading and
+            // record every remaining file as a budget skip (#6).
+            if total_read_bytes.saturating_add(file_size) > limits.max_total_bytes {
+                skipped.push(SkippedFile {
+                    surface: root.surface,
+                    redacted_path: redacted_file_path(entry.path(), &root_path, root),
+                    size_bytes: file_size,
+                    reason: SkipReason::TotalBudgetExceeded,
+                });
+                continue;
+            }
             let bytes = fs::read(entry.path())?;
+            total_read_bytes = total_read_bytes.saturating_add(bytes.len() as u64);
             let content = String::from_utf8_lossy(&bytes);
             let redacted_path = redacted_file_path(entry.path(), &root_path, root);
             let last_modified = metadata
@@ -571,7 +669,13 @@ fn scan_conversation_findings(
     for (index, finding) in findings.iter_mut().enumerate() {
         finding.finding_id = format!("sdf-{index:04}");
     }
-    Ok(findings)
+    skipped.sort_by(|a, b| {
+        a.surface
+            .cmp(b.surface)
+            .then(a.redacted_path.cmp(&b.redacted_path))
+            .then(a.reason.as_str().cmp(b.reason.as_str()))
+    });
+    Ok(ConversationScanResult { findings, skipped })
 }
 
 fn conversation_file_matches(path: &Path, root: &ConversationRoot) -> bool {
@@ -862,6 +966,7 @@ struct SensitiveDataReportBuild<'a> {
     target: &'a Target,
     surfaces: &'a [SurfaceInventory],
     findings: &'a [PatternFinding],
+    skipped: &'a [SkippedFile],
     options: &'a SensitiveDataScanOptions,
     customer_rule_pack: Option<&'a CustomerRulePack>,
 }
@@ -889,7 +994,7 @@ fn sensitive_data_report_value(input: SensitiveDataReportBuild<'_>) -> Result<Va
         Some(pack) => vec![custom_rule_pack_identity_value(&pack.identity)],
         None => Vec::new(),
     };
-    Ok(json!({
+    let mut report = json!({
         "$schema": SENSITIVE_DATA_SCHEMA_URL,
         "sensitiveDataReport": {
             "canonicalization": SENSITIVE_DATA_CANONICALIZATION,
@@ -918,7 +1023,27 @@ fn sensitive_data_report_value(input: SensitiveDataReportBuild<'_>) -> Result<Va
             "schemaVersion": SENSITIVE_DATA_SCHEMA_VERSION,
             "surfaces": input.surfaces.iter().map(surface_value).collect::<Vec<_>>()
         }
-    }))
+    });
+    // Surface skipped files as auditable telemetry. Omit the key entirely when
+    // nothing was skipped so normal reports keep their existing shape (#6).
+    if !input.skipped.is_empty() {
+        report["sensitiveDataReport"]["skipped"] = input
+            .skipped
+            .iter()
+            .map(skipped_value)
+            .collect::<Vec<_>>()
+            .into();
+    }
+    Ok(report)
+}
+
+fn skipped_value(skipped: &SkippedFile) -> Value {
+    json!({
+        "reason": skipped.reason.as_str(),
+        "redactedPath": &skipped.redacted_path,
+        "sizeBytes": skipped.size_bytes,
+        "surface": skipped.surface
+    })
 }
 
 fn surface_value(surface: &SurfaceInventory) -> Value {
@@ -2374,5 +2499,104 @@ enabled = true
 
     fn fixture_stripe_key() -> String {
         "sk_live_vB7qL9mR2xT6pW4zY8nC0dE5fG1h".to_string()
+    }
+
+    #[test]
+    fn oversized_conversation_file_is_skipped_not_read() {
+        // A file larger than the per-file cap must be recorded as a skip and
+        // never read into memory, while a normal small file in the same root
+        // is still scanned (#6). Remove the size guard and this test fails:
+        // the oversized file would be read and produce a finding instead.
+        let root = tempdir().unwrap();
+        let aws_key = fixture_aws_access_key();
+
+        // Sparse file just over a tiny per-file cap. set_len does not allocate
+        // real bytes, so the test stays fast and uses almost no disk. If the
+        // guard were removed, reading this would try to allocate the whole len.
+        let big_relative = ".claude/projects/HugeProject/transcript.jsonl";
+        let big_path = root.path().join(big_relative);
+        fs::create_dir_all(big_path.parent().unwrap()).unwrap();
+        let big_file = fs::File::create(&big_path).unwrap();
+        let cap: u64 = 1024;
+        big_file.set_len(cap + 1).unwrap();
+        drop(big_file);
+
+        // Normal small file carrying a real secret must still be scanned.
+        write_fixture(
+            root.path(),
+            ".claude/projects/SmallProject/session.jsonl",
+            &aws_key,
+        );
+
+        let rules = compile_secret_rules(None);
+        let limits = ConversationScanLimits {
+            max_file_bytes: cap,
+            max_total_bytes: MAX_CONVERSATION_TOTAL_BYTES,
+        };
+        let result =
+            scan_conversation_findings_with_limits(root.path(), &rules, &[], limits).unwrap();
+
+        // Scan completed with no error. The small file produced a finding.
+        assert!(
+            result
+                .findings
+                .iter()
+                .any(|finding| finding.pattern_class == "aws-access-key"),
+            "small file should still be scanned and yield a finding"
+        );
+        // The oversized file is not among the scanned findings.
+        assert!(
+            result
+                .findings
+                .iter()
+                .all(|finding| !finding.redacted_path.contains("transcript")),
+            "oversized file must not appear as a scanned finding"
+        );
+        // The oversized file is reported as a skip with the right reason and size.
+        assert_eq!(
+            result.skipped.len(),
+            1,
+            "exactly one file should be skipped"
+        );
+        let skip = &result.skipped[0];
+        assert_eq!(skip.reason, SkipReason::FileTooLarge);
+        assert_eq!(skip.size_bytes, cap + 1);
+        assert_eq!(skip.surface, "claude-code");
+        // Redaction holds for the skip record too: no project name leaks.
+        assert!(!skip.redacted_path.contains("HugeProject"));
+    }
+
+    #[test]
+    fn total_byte_budget_truncates_conversation_scan() {
+        // A flood of in-range files must not exhaust memory: once the
+        // cumulative read budget is exhausted, remaining files are skipped
+        // with a budget reason rather than read (#6).
+        let root = tempdir().unwrap();
+        for index in 0..4 {
+            write_fixture(
+                root.path(),
+                &format!(".claude/projects/Flood{index}/session.jsonl"),
+                "0123456789", // 10 bytes each
+            );
+        }
+        let rules = compile_secret_rules(None);
+        // Budget allows two files of 10 bytes, the rest must be skipped.
+        let limits = ConversationScanLimits {
+            max_file_bytes: MAX_CONVERSATION_FILE_BYTES,
+            max_total_bytes: 20,
+        };
+        let result =
+            scan_conversation_findings_with_limits(root.path(), &rules, &[], limits).unwrap();
+        assert_eq!(
+            result.skipped.len(),
+            2,
+            "two of four files should be skipped once the budget is exhausted"
+        );
+        assert!(
+            result
+                .skipped
+                .iter()
+                .all(|skip| skip.reason == SkipReason::TotalBudgetExceeded)
+        );
     }
 }
