@@ -797,14 +797,90 @@ fn scan_introspect_execute_yes_emits_tools_list_evidence() {
 }
 
 #[test]
-fn verify_crypto_help_distinguishes_structural_from_cosign_proof() {
+fn verify_bundle_structure_help_distinguishes_structural_from_cosign_proof() {
     Command::cargo_bin("aibom-cli")
         .unwrap()
         .args(["verify", "--help"])
         .assert()
         .success()
         .stdout(contains("structural Sigstore-bundle checks"))
-        .stdout(contains("cosign verify-blob"));
+        .stdout(contains(
+            "structural pre-screen, not cryptographic verification",
+        ))
+        .stdout(contains("cosign verify-blob"))
+        .stdout(contains("--verify-bundle-structure"));
+}
+
+// Without the flag, verify runs schema/structural validation only and passes
+// on a fixture triplet. With the structural Sigstore-bundle pre-screen enabled,
+// the fixture bundle is deliberately rejected at the crypto-verification stage.
+// That rejection is what proves the flag reached the structural check path.
+
+#[test]
+fn verify_passes_without_structural_bundle_flag() {
+    let out = scan_fixture_triplet();
+
+    Command::cargo_bin("aibom-cli")
+        .unwrap()
+        .args(["verify", out.path().to_str().unwrap()])
+        .assert()
+        .success()
+        .stdout(contains("PASS artifacts"));
+}
+
+#[test]
+fn verify_bundle_structure_flag_runs_structural_check() {
+    let out = scan_fixture_triplet();
+
+    Command::cargo_bin("aibom-cli")
+        .unwrap()
+        .args([
+            "verify",
+            out.path().to_str().unwrap(),
+            "--verify-bundle-structure",
+        ])
+        .assert()
+        .failure()
+        .stdout(contains("FAIL artifacts crypto-verification"))
+        .stderr(contains("--verify-crypto is deprecated").not());
+}
+
+#[test]
+fn verify_crypto_alias_still_works_and_warns_deprecated() {
+    let out = scan_fixture_triplet();
+
+    // The legacy spelling still parses (clap alias) and reaches the same
+    // structural check path, but prints a one-line deprecation warning.
+    Command::cargo_bin("aibom-cli")
+        .unwrap()
+        .args(["verify", out.path().to_str().unwrap(), "--verify-crypto"])
+        .assert()
+        .failure()
+        .stdout(contains("FAIL artifacts crypto-verification"))
+        .stderr(contains(
+            "warning: --verify-crypto is deprecated, use --verify-bundle-structure",
+        ));
+}
+
+/// Produce a signed-fixture scan triplet under a fresh output dir so the
+/// structural bundle check has a real fixture bundle to accept.
+fn scan_fixture_triplet() -> TempDir {
+    let root = TempDir::new().unwrap();
+    let out = TempDir::new().unwrap();
+    Command::cargo_bin("aibom-cli")
+        .unwrap()
+        .args([
+            "scan",
+            "--no-system-config",
+            "--target",
+            root.path().to_str().unwrap(),
+            "--output-dir",
+            out.path().to_str().unwrap(),
+            "--skip-sign",
+        ])
+        .assert()
+        .success();
+    out
 }
 
 #[test]
