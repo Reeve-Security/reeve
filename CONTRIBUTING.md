@@ -21,6 +21,28 @@ check passes; you sign once and it covers all future contributions.
 - Do not commit generated `*.aibom.json`, local state, or ad-hoc
   `inventory.yml` files outside the tracked fixture set.
 
+## Gates
+
+The repository owns its quality gates as scripts, so the list of checks lives in
+one place and cannot drift. Run the gate, require it green; do not maintain a
+separate checklist.
+
+- Before opening or merging a PR: `scripts/merge-gate.sh` (the CI `check` job runs
+  the same gate via `scripts/merge-gate.sh --ci-local`; pass `--pr <N>` locally to
+  also require the GitHub required checks to be green on the same commit).
+- Before tagging a release: `scripts/release-gate.sh <X.Y.Z>`.
+- Before publishing a security advisory: `scripts/advisory-publish-gate.sh <X.Y.Z> <GHSA-...>`.
+
+All three are verify-only. They never merge, tag, or publish; a human does those
+after the gate exits zero.
+
+### Security advisory forks
+
+GitHub's temporary private advisory forks do not run Actions, so a fix worked in a
+fork has no CI signal of its own. Before merging an advisory fix: rebase it onto the
+latest `main`, run `scripts/merge-gate.sh --ci-local` on that rebased state, and after
+the advisory merges, wait for `main` CI to go green before continuing.
+
 ## Code of Conduct
 
 Participation in this project is governed by the

@@ -53,8 +53,10 @@ REQUIRED_CI = [
     "gitleaks finding: rule=",
     "gitleaks positive control",
     "expected gitleaks to reject fake GitHub token",
-    "private boundary contract",
-    "python3 scripts/check-private-boundary.py",
+    # ci.yml delegates the local boundary check to the merge gate (single source
+    # of truth); the gate invocation and the gate-runs-the-script assertions are
+    # checked separately in main().
+    "scripts/merge-gate.sh --ci-local",
 ]
 
 
@@ -71,6 +73,8 @@ def main() -> int:
     require_text(ROOT / "CONTRIBUTING.md", REQUIRED_CONTRIBUTING)
     require_text(ROOT / "tools" / "README.md", REQUIRED_TOOLS_README)
     require_text(ROOT / ".github" / "workflows" / "ci.yml", REQUIRED_CI)
+    # The boundary check itself is run by the merge gate, which CI delegates to.
+    require_text(ROOT / "scripts" / "merge-gate.sh", ["python3 scripts/check-private-boundary.py"])
 
     private_history = subprocess.run(
         ["git", "log", "--all", "--oneline", "--", "private/"],
