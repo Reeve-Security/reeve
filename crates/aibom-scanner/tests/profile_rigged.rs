@@ -43,6 +43,7 @@ async fn rigged_server_profile_captures_observed_delta() {
                 evidence_prefix: "ev-rigged".into(),
                 timeout_per_tool_seconds: 5,
                 timeout_total_seconds: 20,
+                ..Default::default()
             },
         )
         .await
@@ -114,6 +115,7 @@ async fn linux_rigged_server_profile_records_denied_evidence() {
                 evidence_prefix: "ev-linux-rigged".into(),
                 timeout_per_tool_seconds: 5,
                 timeout_total_seconds: 20,
+                ..Default::default()
             },
         )
         .await
@@ -251,6 +253,8 @@ async fn run_windows_rigged_profile() -> aibom_core::BehaviorProfile {
                 evidence_prefix: "ev-windows-rigged".into(),
                 timeout_per_tool_seconds: 5,
                 timeout_total_seconds: 20,
+                // Windows profiling is default deny; the test explicitly opts in.
+                allow_windows_unenforced: true,
             },
         )
         .await

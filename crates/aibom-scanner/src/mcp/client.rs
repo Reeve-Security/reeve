@@ -6,6 +6,12 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tokio::time::timeout;
 
+// Minimal PATH handed to introspected MCP children so they can still locate an
+// interpreter or linked binary. Mirrors the SYSTEM_PATH constant used by the
+// profiler in mcp/profile/mod.rs; kept local here because that module does not
+// export it. Keep the two values aligned if either changes.
+const SYSTEM_PATH: &str = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
+
 #[derive(Debug, Clone)]
 pub struct McpLists {
     pub tools: Value,
@@ -19,8 +25,15 @@ pub async fn list_stdio(
     env: &BTreeMap<String, String>,
     timeout_seconds: u64,
 ) -> Result<McpLists> {
+    // Scrub the parent environment before spawning the MCP server so ambient
+    // secrets (cloud, GitHub, and CI tokens) are never leaked to potentially
+    // attacker controlled code. We then set only a minimal safe env, and apply
+    // the caller provided config declared allowlist on top. No ambient parent
+    // env is inherited. See GHSA-44pg-86fc-fc7q.
     let mut child = Command::new(command)
         .args(args)
+        .env_clear()
+        .env("PATH", SYSTEM_PATH)
         .envs(env)
         .stdin(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
