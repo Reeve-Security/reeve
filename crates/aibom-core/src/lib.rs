@@ -32,6 +32,7 @@ pub enum ValidationStage {
     Canonicalization,
     HashMatch,
     AttestationShape,
+    AttestationBinding,
     CryptoVerification,
 }
 
@@ -43,6 +44,7 @@ impl fmt::Display for ValidationStage {
             Self::Canonicalization => "canonicalization",
             Self::HashMatch => "hash-match",
             Self::AttestationShape => "attestation-shape",
+            Self::AttestationBinding => "attestation-binding",
             Self::CryptoVerification => "crypto-verification",
         })
     }
@@ -104,6 +106,10 @@ pub enum ErrorCode {
     AttestationSubjectRoleMismatch,
     #[serde(rename = "attestation.payload_decode")]
     AttestationPayloadDecode,
+    #[serde(rename = "attestation.subject_name_unexpected")]
+    AttestationSubjectNameUnexpected,
+    #[serde(rename = "attestation.subject_digest_mismatch")]
+    AttestationSubjectDigestMismatch,
     #[serde(rename = "crypto.fulcio_chain_untrusted")]
     CryptoFulcioChainUntrusted,
     #[serde(rename = "crypto.oidc_issuer_not_allowed")]
@@ -154,6 +160,8 @@ impl ErrorCode {
             Self::AttestationArtifactRolesMismatch => "attestation.artifactRoles_mismatch",
             Self::AttestationSubjectRoleMismatch => "attestation.subject_role_mismatch",
             Self::AttestationPayloadDecode => "attestation.payload_decode",
+            Self::AttestationSubjectNameUnexpected => "attestation.subject_name_unexpected",
+            Self::AttestationSubjectDigestMismatch => "attestation.subject_digest_mismatch",
             Self::CryptoFulcioChainUntrusted => "crypto.fulcio_chain_untrusted",
             Self::CryptoOidcIssuerNotAllowed => "crypto.oidc_issuer_not_allowed",
             Self::CryptoOidcSubjectNotAllowed => "crypto.oidc_subject_not_allowed",

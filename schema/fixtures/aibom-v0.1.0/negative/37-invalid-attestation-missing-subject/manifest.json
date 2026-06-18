@@ -1,0 +1,13 @@
+{
+  "name": "37-invalid-attestation-missing-subject",
+  "kind": "negative",
+  "expected": "verify-reject",
+  "rejectStage": "attestation-binding",
+  "expectedErrorCode": "attestation.subject_digest_mismatch",
+  "rejectPointer": "/dsseEnvelope/payload[decoded]/subject",
+  "invariants": [
+    "Q4.v"
+  ],
+  "description": "Both artifacts are present on disk. The statement names both expected subjects and passes every shape check, but the cdx subject carries the AIBOM digest instead of the CycloneDX digest. In effect the attestation has no honest binding to the real fixture-37.cdx.json bytes: the cdx artifact is effectively missing from the signed set while a duplicate aibom digest masquerades in its place. Before digest binding this passed; binding rejects because the recorded cdx subject digest does not match the cdx artifact bytes.",
+  "notes": "Covers the absent-artifact case: an expected artifact has no subject digest that matches its real bytes."
+}

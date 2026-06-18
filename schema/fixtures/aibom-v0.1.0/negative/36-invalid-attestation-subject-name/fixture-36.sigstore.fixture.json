@@ -1,0 +1,46 @@
+{
+  "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+  "verificationMaterial": {
+    "_fixture_note": "placeholder; real Fulcio cert + Rekor v2 proof generated via cosign keyless in build-order step 4",
+    "certificate": {
+      "rawBytes": "FIXTURE_PLACEHOLDER_CERT_BYTES"
+    },
+    "tlogEntries": [
+      {
+        "_fixture_note": "placeholder Rekor v2 dsse entry",
+        "logIndex": "0",
+        "logId": {
+          "keyId": "FIXTURE_PLACEHOLDER"
+        },
+        "kindVersion": {
+          "kind": "dsse",
+          "version": "0.0.1"
+        },
+        "integratedTime": "1745193600",
+        "inclusionPromise": {
+          "signedEntryTimestamp": "FIXTURE_PLACEHOLDER"
+        },
+        "inclusionProof": {
+          "_fixture_note": "placeholder inclusion proof",
+          "checkpoint": {
+            "envelope": "FIXTURE_PLACEHOLDER"
+          },
+          "hashes": [],
+          "logIndex": "0",
+          "rootHash": "FIXTURE_PLACEHOLDER",
+          "treeSize": "0"
+        }
+      }
+    ]
+  },
+  "dsseEnvelope": {
+    "payload": "eyJfdHlwZSI6Imh0dHBzOi8vaW4tdG90by5pby9TdGF0ZW1lbnQvdjEiLCJwcmVkaWNhdGUiOnsiYXJ0aWZhY3RSb2xlcyI6eyJmaXh0dXJlLTM2LmFpYm9tLmpzb24iOiJhaWJvbS1zaWRlY2FyIiwiYXR0YWNrZXItc3VwcGxpZWQuY2R4Lmpzb24iOiJjeWNsb25lZHgifSwiY2Fub25pY2FsaXphdGlvbiI6IlJGQzg3ODUtSkNTK2FpYm9tLWFycmF5LW9yZGVyLXYwLjEiLCJzY2hlbWFWZXJzaW9uIjoiMC4xLjAifSwicHJlZGljYXRlVHlwZSI6Imh0dHBzOi8vYWlib20uZXhhbXBsZS9hdHRlc3RhdGlvbi9haWJvbS92MC4xIiwic3ViamVjdCI6W3siZGlnZXN0Ijp7InNoYTI1NiI6Ijk3MDc4NDk5ZGJiNDBmZDRkMzVmNjE5MGEyN2M4M2NjOTQ5YjJjNGJkYmJlYWM5YThjYWIyYzMxMDUwZWZiYTYifSwibmFtZSI6ImZpeHR1cmUtMzYuYWlib20uanNvbiJ9LHsiZGlnZXN0Ijp7InNoYTI1NiI6IjU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTUifSwibmFtZSI6ImF0dGFja2VyLXN1cHBsaWVkLmNkeC5qc29uIn1dfQ==",
+    "payloadType": "application/vnd.in-toto+json",
+    "signatures": [
+      {
+        "_fixture_note": "placeholder signature",
+        "sig": "FIXTURE_PLACEHOLDER_SIGNATURE"
+      }
+    ]
+  }
+}
