@@ -17,11 +17,61 @@
         - "{{ reeve_config_dir }}"
         - "{{ reeve_scan_dir }}"
 
-    - name: Install Reeve binary
+    - name: Create temporary directory for binary verification
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: reeve-verify-
+      register: reeve_verify_tmp
+
+    - name: Reject non-https binary URL
+      ansible.builtin.assert:
+        that:
+          - reeve_binary_url is match('^https://')
+        fail_msg: "reeve_binary_url must be https://, refusing to install an unverified binary"
+      # Set reeve_allow_insecure_url=true ONLY for hermetic local tests against
+      # a localhost http server. This never bypasses signature verification.
+      when: not (reeve_allow_insecure_url | default(false) | bool)
+
+    - name: Ensure cosign is available
+      ansible.builtin.command:
+        cmd: cosign version
+      changed_when: false
+
+    - name: Download Reeve binary to temporary path
       ansible.builtin.get_url:
         url: "{{ reeve_binary_url }}"
+        dest: "{{ reeve_verify_tmp.path }}/aibom-cli"
+        mode: "0600"
+
+    - name: Download Reeve binary signature bundle to temporary path
+      ansible.builtin.get_url:
+        url: "{{ reeve_binary_bundle_url }}"
+        dest: "{{ reeve_verify_tmp.path }}/aibom-cli.sigstore.json"
+        mode: "0600"
+
+    - name: Verify Reeve binary signature with cosign
+      ansible.builtin.command:
+        cmd: >-
+          cosign verify-blob
+          --bundle {{ reeve_verify_tmp.path }}/aibom-cli.sigstore.json
+          --certificate-identity-regexp {{ reeve_signer_identity_regexp }}
+          --certificate-oidc-issuer-regexp {{ reeve_signer_issuer_regexp }}
+          {{ reeve_verify_tmp.path }}/aibom-cli
+      register: reeve_cosign_verify
+      changed_when: false
+      failed_when: reeve_cosign_verify.rc != 0
+
+    - name: Install verified Reeve binary
+      ansible.builtin.copy:
+        src: "{{ reeve_verify_tmp.path }}/aibom-cli"
         dest: "{{ reeve_bin }}"
         mode: "0755"
+        remote_src: true
+
+    - name: Remove temporary verification directory
+      ansible.builtin.file:
+        path: "{{ reeve_verify_tmp.path }}"
+        state: absent
 
     - name: Install signed surface config
       ansible.builtin.get_url:
