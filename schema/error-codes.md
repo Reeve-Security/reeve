@@ -90,6 +90,8 @@ is verified with `cosign verify-blob`, outside the AIBOM validator.
 | `attestation.digest_algorithm` | Any subject digest object uses an algorithm other than `sha256`. |
 | `attestation.artifactRoles_mismatch` | `predicate.artifactRoles` does not contain exactly one `cyclonedx` role and exactly one `aibom-sidecar` role. |
 | `attestation.subject_role_mismatch` | Subject names and `artifactRoles` keys do not form a bijection. |
+| `attestation.subject_name_unexpected` | The set of `subject[].name` values does not equal exactly the expected artifact filenames (AIBOM always, CycloneDX when a sidecar is present). |
+| `attestation.subject_digest_mismatch` | A subject `digest.sha256` value does not equal the sha256 of the actual artifact bytes it claims to cover. |
 | `attestation.payload_decode` | `dsseEnvelope.payload` cannot be base64-decoded, or the decoded bytes are not valid JSON. |
 
 ### Stage: `crypto-verification`
