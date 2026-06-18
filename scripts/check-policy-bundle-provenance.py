@@ -52,8 +52,11 @@ def main() -> None:
     require(script, '--write')
     require(script, '--check')
 
-    require(".github/workflows/ci.yml", "name: policy bundle provenance")
-    require(".github/workflows/ci.yml", "bash scripts/build-policy-bundle.sh --check")
+    # The check list is orchestrated by scripts/merge-gate.sh (single source of
+    # truth); ci.yml delegates to it, and the gate runs the bundle reproducibility
+    # check. The pinned OPA install stays in ci.yml.
+    require(".github/workflows/ci.yml", "scripts/merge-gate.sh --ci-local")
+    require("scripts/merge-gate.sh", "bash scripts/build-policy-bundle.sh --check")
     require(".github/workflows/ci.yml", f'OPA_VERSION="{EXPECTED_OPA_VERSION}"')
     require(".github/workflows/ci.yml", "opa_linux_amd64_static")
     require(".github/workflows/ci.yml", "a9d9481e463e7af8cb1a2cd7c3deb764f0327b3281c54e632546c2f425fc0824")

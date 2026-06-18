@@ -208,54 +208,12 @@ jobs:
           sudo apt-get install -y strace
           strace -V
 
-      - name: cargo fmt
-        run: cargo fmt --all -- --check
-
-      - name: cargo clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: cargo test
-        run: cargo test --workspace
-
-      - name: policy bundle provenance
-        run: |
-          python3 scripts/check-policy-bundle-provenance.py
-          bash scripts/build-policy-bundle.sh --check
-
-      - name: fixture regenerator idempotency
-        run: |
-          python3 scripts/regenerate-schema-fixtures.py
-          git diff --exit-code schema/fixtures/
-
-      - name: schema documentation contract
-        run: python3 scripts/check-schema-docs.py
-
-      - name: deployment template contract
-        run: python3 scripts/check-deploy-templates.py
-
-      - name: private boundary contract
-        run: python3 scripts/check-private-boundary.py
-
-      - name: tools OSS readiness contract
-        run: python3 scripts/check-tools-oss-readiness.py
-
-      - name: release sensitive-data flags contract
+      # The local check list is owned by scripts/merge-gate.sh (single source of
+      # truth) so it cannot drift between CI and local runs. gitleaks and
+      # windows-release-smoke remain separate jobs below.
+      - name: merge gate (local checks)
         shell: bash
-        run: |
-          set -euo pipefail
-          artifacts_dir="$(mktemp -d)"
-          stage_dir="$(mktemp -d)"
-          trap 'rm -rf "${artifacts_dir}" "${stage_dir}"' EXIT
-          archive_root="${stage_dir}/aibom-cli-x86_64-unknown-linux-gnu"
-          mkdir -p "${archive_root}"
-          cp target/debug/aibom-cli "${archive_root}/aibom-cli"
-          chmod +x "${archive_root}/aibom-cli"
-          tar -C "${stage_dir}" -cJf "${artifacts_dir}/aibom-cli-x86_64-unknown-linux-gnu.tar.xz" \
-            aibom-cli-x86_64-unknown-linux-gnu
-          python3 scripts/check-release-sensitive-data-flags.py "${artifacts_dir}"
-
-      - name: release readiness runner
-        run: bash scripts/release-readiness.sh
+        run: bash scripts/merge-gate.sh --ci-local
 
   windows-release-smoke:
     if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
