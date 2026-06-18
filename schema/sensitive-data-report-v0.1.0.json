@@ -103,8 +103,44 @@
             "$ref": "#/$defs/finding"
           }
         },
+        "skipped": {
+          "type": "array",
+          "description": "Conversation files not read during the content scan because a per-file size cap or the cumulative read budget was exceeded. Recorded as auditable telemetry so a skip is never a silent drop. Carries redacted path and size only, never file content. Omitted when nothing was skipped. Sorted by surface, redacted path, then reason.",
+          "items": {
+            "$ref": "#/$defs/skippedFile"
+          }
+        },
         "signature": {
           "$ref": "#/$defs/signatureReference"
+        }
+      }
+    },
+    "skippedFile": {
+      "type": "object",
+      "required": [
+        "reason",
+        "redactedPath",
+        "sizeBytes",
+        "surface"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "surface": {
+          "$ref": "#/$defs/surfaceName"
+        },
+        "redactedPath": {
+          "$ref": "#/$defs/redactedPath"
+        },
+        "sizeBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "file-too-large",
+            "total-budget-exceeded"
+          ]
         }
       }
     },
