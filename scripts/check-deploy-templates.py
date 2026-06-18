@@ -35,6 +35,12 @@ REQUIRED = [
 NEEDLES = [
     "--require-signed-config",
     "surfaces.yaml.sigstore.json",
+    # GHSA-9cmp-5q9w-hw7r: the binary must be signature-verified before it is
+    # installed or executed. Every install script must run cosign verify-blob
+    # with an OIDC issuer regexp.
+    "cosign",
+    "verify-blob",
+    "certificate-oidc-issuer-regexp",
 ]
 
 
@@ -73,8 +79,12 @@ def main() -> None:
                 check=True,
             )
 
-    if "ansible.builtin.systemd" not in (ROOT / "tools/deploy/ansible/reeve.yml").read_text():
+    ansible_text = (ROOT / "tools/deploy/ansible/reeve.yml").read_text()
+    if "ansible.builtin.systemd" not in ansible_text:
         raise SystemExit("ansible playbook missing systemd timer")
+    for needle in ("cosign verify-blob", "certificate-oidc-issuer-regexp"):
+        if needle not in ansible_text:
+            raise SystemExit(f"ansible playbook missing binary verification: {needle}")
 
     validate_curl_install_template()
 
@@ -106,19 +116,38 @@ esac
         binary.chmod(0o755)
         config = remote / "surfaces.yaml"
         bundle = remote / "surfaces.yaml.sigstore.json"
+        binary_bundle = remote / "aibom-cli.sigstore.json"
         config.write_text("version: 1\nsurfaces: []\n")
         bundle.write_text('{"mediaType":"application/vnd.dev.sigstore.bundle.v0.3+json"}\n')
+        binary_bundle.write_text('{"mediaType":"application/vnd.dev.sigstore.bundle.v0.3+json"}\n')
+
+        # Stub cosign that accepts the binary, so the template's binary
+        # verification path runs without a real signing identity. The install
+        # script prepends REEVE_RUNTIME_PATH onto PATH, so the stub is injected
+        # there to win over any real cosign on the host.
+        cosign_dir = base / "cosign"
+        cosign_dir.mkdir()
+        cosign_stub = cosign_dir / "cosign"
+        cosign_stub.write_text("#!/usr/bin/env bash\nexit 0\n")
+        cosign_stub.chmod(0o755)
 
         env = environ.copy()
         env.update(
             {
                 "REEVE_BINARY_URL": binary.as_uri(),
+                "REEVE_BINARY_BUNDLE_URL": binary_bundle.as_uri(),
                 "REEVE_SURFACE_CONFIG_URL": config.as_uri(),
                 "REEVE_SURFACE_CONFIG_BUNDLE_URL": bundle.as_uri(),
                 "REEVE_SIGNER_IDENTITY_REGEXP": r"^https://github.com/Reeve-Security/reeve/.*$",
+                "REEVE_SIGNER_ISSUER_REGEXP": r"^https://token.actions.githubusercontent.com$",
                 "REEVE_INSTALL_ROOT": str(root),
                 "REEVE_SKIP_SCHEDULER": "1",
                 "REEVE_STUB_LOG": str(log),
+                # file:// is not https, so relax the scheme check for this
+                # hermetic template validation. Binary signature verification
+                # still runs against the stub cosign above.
+                "REEVE_ALLOW_INSECURE_URL": "1",
+                "REEVE_RUNTIME_PATH": f"{cosign_dir}:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin",
             }
         )
         subprocess.run(

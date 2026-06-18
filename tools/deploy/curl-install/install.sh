@@ -2,15 +2,66 @@
 set -euo pipefail
 
 : "${REEVE_BINARY_URL:?missing REEVE_BINARY_URL}"
+: "${REEVE_BINARY_BUNDLE_URL:?missing REEVE_BINARY_BUNDLE_URL}"
 : "${REEVE_SURFACE_CONFIG_URL:?missing REEVE_SURFACE_CONFIG_URL}"
 : "${REEVE_SURFACE_CONFIG_BUNDLE_URL:?missing REEVE_SURFACE_CONFIG_BUNDLE_URL}"
 : "${REEVE_SIGNER_IDENTITY_REGEXP:?missing REEVE_SIGNER_IDENTITY_REGEXP}"
+: "${REEVE_SIGNER_ISSUER_REGEXP:?missing REEVE_SIGNER_ISSUER_REGEXP}"
 
 BIN="/usr/local/bin/aibom-cli"
 ROOT="${REEVE_INSTALL_ROOT:-}"
 SKIP_SCHEDULER="${REEVE_SKIP_SCHEDULER:-0}"
 REEVE_RUNTIME_PATH="${REEVE_RUNTIME_PATH:-/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin}"
 export PATH="${REEVE_RUNTIME_PATH}:${PATH:-}"
+
+# verify_binary downloads the Reeve binary and its Sigstore bundle to temporary
+# paths, cryptographically verifies the binary against the signer identity and
+# OIDC issuer regexps, and only on success moves it into its final path with
+# mode 0755. It fails closed: a missing cosign, a missing bundle, a non-https
+# source, or a failed verification all abort the install with a non-zero exit.
+#
+# Args: $1 = binary source URL, $2 = bundle source URL, $3 = final binary path.
+#
+# REEVE_ALLOW_INSECURE_URL=1 relaxes the https-only check for hermetic local
+# tests against a localhost http server. It NEVER bypasses signature
+# verification; cosign verify-blob still runs and must pass.
+verify_binary() {
+  local bin_url="$1" bundle_url="$2" final_bin="$3"
+
+  if [[ "${REEVE_ALLOW_INSECURE_URL:-0}" != "1" ]]; then
+    if [[ "${bin_url}" != https://* ]]; then
+      echo "reeve: REEVE_BINARY_URL must be https://, refusing to install: ${bin_url}" >&2
+      exit 1
+    fi
+  fi
+
+  if ! command -v cosign >/dev/null 2>&1; then
+    echo "reeve: cosign not found on PATH, refusing to install an unverified binary" >&2
+    exit 1
+  fi
+
+  local tmp_dir tmp_bin tmp_bundle
+  tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/reeve-verify.XXXXXX")"
+  trap 'rm -rf "${tmp_dir}"' RETURN
+  tmp_bin="${tmp_dir}/aibom-cli"
+  tmp_bundle="${tmp_dir}/aibom-cli.sigstore.json"
+
+  fetch "${bin_url}" "${tmp_bin}"
+  fetch "${bundle_url}" "${tmp_bundle}"
+
+  if ! cosign verify-blob \
+    --bundle "${tmp_bundle}" \
+    --certificate-identity-regexp "${REEVE_SIGNER_IDENTITY_REGEXP}" \
+    --certificate-oidc-issuer-regexp "${REEVE_SIGNER_ISSUER_REGEXP}" \
+    "${tmp_bin}" >/dev/null 2>&1; then
+    echo "reeve: cosign verify-blob failed for the downloaded binary, refusing to install" >&2
+    exit 1
+  fi
+
+  install -d -m 0755 "$(dirname "${final_bin}")"
+  mv -f "${tmp_bin}" "${final_bin}"
+  chmod 0755 "${final_bin}"
+}
 
 if [[ "$(id -u)" == "0" ]]; then
   case "$(uname -s)" in
@@ -29,9 +80,7 @@ fetch() {
 
 HOST_BIN="${BIN}"
 BIN="$(root_path "${HOST_BIN}")"
-install -d -m 0755 "$(dirname "${BIN}")"
-fetch "${REEVE_BINARY_URL}" "${BIN}"
-chmod 0755 "${BIN}"
+verify_binary "${REEVE_BINARY_URL}" "${REEVE_BINARY_BUNDLE_URL}" "${BIN}"
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
   CONFIG_DIR="/Library/Application Support/Reeve"

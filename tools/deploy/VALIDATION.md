@@ -11,23 +11,54 @@ still needs a real endpoint before a vendor package is called certified.
 - every install script uses `--require-signed-config`;
 - every install script references `surfaces.yaml.sigstore.json`;
 - every install script pins a signer identity regexp;
+- every install script verifies the binary with `cosign verify-blob` and
+  pins an OIDC issuer regexp (`certificate-oidc-issuer-regexp`);
 - shell scripts pass `bash -n`, plus `shellcheck` when available;
 - PowerShell scripts parse under `pwsh` when available;
-- the Ansible template includes a systemd timer; and
+- the Ansible template includes a systemd timer and a `cosign verify-blob`
+  step with an OIDC issuer regexp; and
 - the curl-install template performs an endpoint-style install into a
-  temporary root, writes the binary, signed surface config, signature
-  bundle, systemd service, systemd timer, and runs signed-config
-  verification through a stubbed `aibom-cli`.
+  temporary root, verifies the binary through a stubbed `cosign`, writes the
+  binary, signed surface config, signature bundle, systemd service, systemd
+  timer, and runs signed-config verification through a stubbed `aibom-cli`.
+
+## Binary signature verification (GHSA-9cmp-5q9w-hw7r)
+
+Every install template now cryptographically verifies the Reeve binary
+before it is made executable, and fails closed. Each template:
+
+1. rejects a non-`https://` binary URL;
+2. downloads the binary and its Sigstore bundle to a temporary path;
+3. runs `cosign verify-blob` on the binary against the pinned signer
+   identity (`REEVE_SIGNER_IDENTITY_REGEXP`) and OIDC issuer
+   (`REEVE_SIGNER_ISSUER_REGEXP`); and
+4. only on success moves the binary into its final path and sets mode 0755.
+
+If `cosign` is missing, the binary bundle URL is unset, or verification
+returns non-zero, the install aborts non-zero and no binary is installed.
+The two new required inputs are `REEVE_BINARY_BUNDLE_URL` and
+`REEVE_SIGNER_ISSUER_REGEXP` (the Jamf `postinstall.sh` takes them as
+positional arguments 8 and 9; the PowerShell templates take them as
+`-BinaryBundleUrl` and `-SignerIssuerRegexp`; the Ansible playbook takes
+them as `reeve_binary_bundle_url` and `reeve_signer_issuer_regexp`).
+
+A hermetic test at `tools/deploy/curl-install/tests/verify_binary_test.sh`
+proves the fail-closed behavior: with an attacker controlling both the
+binary URL and the bundle URL, the installer aborts non-zero and installs
+nothing.
 
 The endpoint-style install uses:
 
 - `REEVE_INSTALL_ROOT` to redirect `/usr/local`, `/etc`, and `/var`
-  writes into a temporary directory; and
+  writes into a temporary directory;
 - `REEVE_SKIP_SCHEDULER=1` to avoid mutating host `systemd` or
-  `launchd` state.
+  `launchd` state; and
+- `REEVE_ALLOW_INSECURE_URL=1` to allow `file://` or localhost http
+  fixtures past the https-only check. This relaxes only the URL scheme
+  check; `cosign verify-blob` still runs and must pass.
 
 These test hooks are for validation only. Production installs should not
-set either variable.
+set any of them.
 
 ## Manual endpoint validation
 
