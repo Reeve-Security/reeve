@@ -2276,9 +2276,9 @@ fn report_472_fixture_aibom() -> serde_json::Value {
                 }
             ],
             "scan": {
-                "adapter": {"name": "mcp", "version": "0.3.8"},
+                "adapter": {"name": "mcp", "version": "0.3.9"},
                 "scanId": "report-472-rollup",
-                "scanner": {"name": "reeve", "version": "0.3.8"},
+                "scanner": {"name": "reeve", "version": "0.3.9"},
                 "target": {"description": "~ (redacted)", "kind": "filesystem"},
                 "timestamp": "2026-06-10T00:00:00Z"
             },
@@ -2337,7 +2337,7 @@ fn report_472_fixture_sensitive(scan_id: &str) -> serde_json::Value {
                 "customRules": [],
                 "metadataInventory": true,
                 "rulePacks": [{"id": "reeve-default-conversation-secrets", "version": "2026.05.0"}],
-                "scannerVersion": "0.3.8",
+                "scannerVersion": "0.3.9",
                 "suppressions": []
             },
             "redaction": {
@@ -2347,7 +2347,7 @@ fn report_472_fixture_sensitive(scan_id: &str) -> serde_json::Value {
             "reportId": format!("sdr-{scan_id}"),
             "scan": {
                 "scanId": scan_id,
-                "scanner": {"name": "reeve", "version": "0.3.8"},
+                "scanner": {"name": "reeve", "version": "0.3.9"},
                 "target": {"description": "~ (redacted)", "kind": "filesystem"},
                 "timestamp": "2026-06-10T00:00:00Z"
             },
