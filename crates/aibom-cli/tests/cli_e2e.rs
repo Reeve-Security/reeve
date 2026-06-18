@@ -804,7 +804,9 @@ fn verify_bundle_structure_help_distinguishes_structural_from_cosign_proof() {
         .assert()
         .success()
         .stdout(contains("structural Sigstore-bundle checks"))
-        .stdout(contains("structural pre-screen, not cryptographic verification"))
+        .stdout(contains(
+            "structural pre-screen, not cryptographic verification",
+        ))
         .stdout(contains("cosign verify-blob"))
         .stdout(contains("--verify-bundle-structure"));
 }

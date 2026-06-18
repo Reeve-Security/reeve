@@ -422,9 +422,7 @@ struct ScanOutputArtifacts {
 
 fn main() -> Result<()> {
     if std::env::args().any(|arg| arg == "--verify-crypto") {
-        eprintln!(
-            "warning: --verify-crypto is deprecated, use --verify-bundle-structure"
-        );
+        eprintln!("warning: --verify-crypto is deprecated, use --verify-bundle-structure");
     }
     let cli = Cli::parse();
     match cli.command {
@@ -439,7 +437,14 @@ fn main() -> Result<()> {
             verify_bundle_structure,
             allowlist,
             schema,
-        } => validate_artifact_paths(cdx, aibom, bundle, verify_bundle_structure, allowlist, schema),
+        } => validate_artifact_paths(
+            cdx,
+            aibom,
+            bundle,
+            verify_bundle_structure,
+            allowlist,
+            schema,
+        ),
         Commands::Scan {
             target,
             adapters,
