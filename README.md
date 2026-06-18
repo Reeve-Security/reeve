@@ -166,8 +166,11 @@ Run Reeve's structural checks, or use `cosign verify-blob` for full
 Fulcio/Rekor proof:
 
 ```bash
-aibom-cli verify ./reeve-out --verify-crypto
+aibom-cli verify ./reeve-out --verify-bundle-structure
 ```
+
+The old `--verify-crypto` spelling still works as a deprecated alias and
+prints a warning. It will be removed in a future release.
 
 ## Opt-in execution and profiling
 

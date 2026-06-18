@@ -3,7 +3,7 @@ name: live-sigstore-acceptance
 # Online acceptance gate for real Sigstore signing. Proves that --sign-mode
 # real produces a live Sigstore bundle (real Fulcio cert + Rekor v2 tlog
 # entry) using the GitHub Actions OIDC identity, and that the validator
-# accepts that bundle under --verify-crypto.
+# accepts that bundle under --verify-bundle-structure.
 #
 # Deliberately separate from ci.yml so the fixture-only release-readiness
 # runner stays free of cosign/Sigstore/Rekor dependencies. Triggers are
@@ -155,8 +155,8 @@ jobs:
             --type "https://aibom.example/attestation/aibom/v0.1" \
             "$AIBOM"
 
-      - name: Verify bundle through validator (--verify-crypto)
+      - name: Verify bundle through validator (--verify-bundle-structure)
         run: |
-          ./target/release/aibom-cli verify out --verify-crypto \
+          ./target/release/aibom-cli verify out --verify-bundle-structure \
             | tee verify.stdout
           grep -q '^PASS artifacts$' verify.stdout

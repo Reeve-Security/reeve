@@ -104,10 +104,11 @@ enum Commands {
         #[arg(long)]
         bundle: Option<PathBuf>,
         /// Run Reeve's structural Sigstore-bundle checks: bundle shape,
-        /// subject hashes, allowlist facts, and fixture rejection. For public
-        /// Fulcio/Rekor proof, use cosign verify-blob.
-        #[arg(long)]
-        verify_crypto: bool,
+        /// subject facts, allowlist facts, and fixture rejection. This is a
+        /// structural pre-screen, not cryptographic verification; for full
+        /// Sigstore verification use cosign verify-blob.
+        #[arg(long, alias = "verify-crypto")]
+        verify_bundle_structure: bool,
         #[arg(long)]
         allowlist: Option<PathBuf>,
         #[arg(long)]
@@ -255,10 +256,11 @@ enum Commands {
     Verify {
         scan_dir: PathBuf,
         /// Run Reeve's structural Sigstore-bundle checks: bundle shape,
-        /// subject hashes, allowlist facts, and fixture rejection. For public
-        /// Fulcio/Rekor proof, use cosign verify-blob.
-        #[arg(long)]
-        verify_crypto: bool,
+        /// subject facts, allowlist facts, and fixture rejection. This is a
+        /// structural pre-screen, not cryptographic verification; for full
+        /// Sigstore verification use cosign verify-blob.
+        #[arg(long, alias = "verify-crypto")]
+        verify_bundle_structure: bool,
         #[arg(long)]
         allowlist: Option<PathBuf>,
         #[arg(long)]
@@ -316,10 +318,11 @@ enum PolicyCommands {
         #[arg(long, default_value = "default")]
         profile: String,
         /// Run Reeve's structural Sigstore-bundle checks: bundle shape,
-        /// subject hashes, allowlist facts, and fixture rejection. For public
-        /// Fulcio/Rekor proof, use cosign verify-blob.
-        #[arg(long)]
-        verify_crypto: bool,
+        /// subject facts, allowlist facts, and fixture rejection. This is a
+        /// structural pre-screen, not cryptographic verification; for full
+        /// Sigstore verification use cosign verify-blob.
+        #[arg(long, alias = "verify-crypto")]
+        verify_bundle_structure: bool,
         #[arg(long)]
         allowlist: Option<PathBuf>,
         #[arg(long)]
@@ -418,6 +421,11 @@ struct ScanOutputArtifacts {
 }
 
 fn main() -> Result<()> {
+    if std::env::args().any(|arg| arg == "--verify-crypto") {
+        eprintln!(
+            "warning: --verify-crypto is deprecated, use --verify-bundle-structure"
+        );
+    }
     let cli = Cli::parse();
     match cli.command {
         Commands::Validate {
@@ -428,10 +436,10 @@ fn main() -> Result<()> {
             cdx,
             aibom,
             bundle,
-            verify_crypto,
+            verify_bundle_structure,
             allowlist,
             schema,
-        } => validate_artifact_paths(cdx, aibom, bundle, verify_crypto, allowlist, schema),
+        } => validate_artifact_paths(cdx, aibom, bundle, verify_bundle_structure, allowlist, schema),
         Commands::Scan {
             target,
             adapters,
@@ -525,21 +533,21 @@ fn main() -> Result<()> {
         } => mcp_registry_fetch(base_url, limit, updated_since, output),
         Commands::Verify {
             scan_dir,
-            verify_crypto,
+            verify_bundle_structure,
             allowlist,
             schema,
-        } => verify(scan_dir, verify_crypto, allowlist, schema),
+        } => verify(scan_dir, verify_bundle_structure, allowlist, schema),
         Commands::Policy { command } => match command {
             PolicyCommands::Check {
                 scan_dir,
                 profile,
-                verify_crypto,
+                verify_bundle_structure,
                 allowlist,
                 schema,
             } => policy_check(PolicyCheckCommand {
                 scan_dir,
                 profile,
-                verify_crypto,
+                verify_crypto: verify_bundle_structure,
                 allowlist,
                 schema,
             }),
