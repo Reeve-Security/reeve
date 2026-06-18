@@ -26,6 +26,20 @@ const SYSTEM_PATH: &str = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/s
 // still resolve system DLLs and helper binaries. Kept deliberately small.
 #[cfg(target_os = "windows")]
 const WINDOWS_MINIMAL_PATH: &str = "C:\\Windows\\System32;C:\\Windows";
+// Windows console hosts (powershell.exe, cmd.exe) refuse to start without a
+// small set of non-secret system variables (SystemRoot above all). After
+// env_clear we forward only this fixed allowlist from the parent so the scrub
+// does not break process launch. None of these carry credentials.
+#[cfg(target_os = "windows")]
+const WINDOWS_SYSTEM_ENV_PASSTHROUGH: [&str; 7] = [
+    "SystemRoot",
+    "SystemDrive",
+    "windir",
+    "COMSPEC",
+    "PATHEXT",
+    "NUMBER_OF_PROCESSORS",
+    "PROCESSOR_ARCHITECTURE",
+];
 #[cfg(target_os = "linux")]
 const LINUX_OBSERVATIONAL_FALLBACK_WARNING: &str =
     "Linux profiling used strace observation without Landlock/seccomp enforcement; see ";
@@ -567,7 +581,8 @@ async fn run_windows_observational_server(
     // then set only a minimal safe env (a minimal PATH plus USERPROFILE and the
     // temp dir vars). No ambient parent env is inherited. See
     // GHSA-44pg-86fc-fc7q.
-    let mut child = Command::new(&plan.executable)
+    let mut command = Command::new(&plan.executable);
+    command
         .args(&plan.args)
         .env_clear()
         .env("PATH", WINDOWS_MINIMAL_PATH)
@@ -578,14 +593,20 @@ async fn run_windows_observational_server(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()
-        .with_context(|| {
-            format!(
-                "spawn Windows observational MCP server {}",
-                plan.executable.display()
-            )
-        })?;
+        .kill_on_drop(true);
+    // Forward only the fixed non-secret system-variable allowlist so the
+    // env_clear scrub does not stop powershell.exe/cmd.exe from launching.
+    for key in WINDOWS_SYSTEM_ENV_PASSTHROUGH {
+        if let Ok(value) = std::env::var(key) {
+            command.env(key, value);
+        }
+    }
+    let mut child = command.spawn().with_context(|| {
+        format!(
+            "spawn Windows observational MCP server {}",
+            plan.executable.display()
+        )
+    })?;
     let pid = child.id().unwrap_or_default();
 
     let mut stdin = child.stdin.take().context("missing child stdin")?;
