@@ -22,6 +22,10 @@ use tokio::time::{sleep, timeout};
 #[cfg_attr(target_os = "linux", allow(dead_code))]
 const PROFILE_TEMPLATE: &str = include_str!("sandbox_profiles/default.sb");
 const SYSTEM_PATH: &str = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
+// Minimal PATH for the scrubbed Windows child so a discovered executable can
+// still resolve system DLLs and helper binaries. Kept deliberately small.
+#[cfg(target_os = "windows")]
+const WINDOWS_MINIMAL_PATH: &str = "C:\\Windows\\System32;C:\\Windows";
 #[cfg(target_os = "linux")]
 const LINUX_OBSERVATIONAL_FALLBACK_WARNING: &str =
     "Linux profiling used strace observation without Landlock/seccomp enforcement; see ";
@@ -45,6 +49,19 @@ struct InvokedTool {
 
 pub async fn profile(provider: &ToolProvider, opts: &ProfileOptions) -> Result<BehaviorProfile> {
     let mut builder = ProfileBuilder::new(provider, opts);
+
+    // Windows profiling is observational only with no kernel level enforcement,
+    // so it spawns and drives untrusted MCP code without a sandbox. Default
+    // deny: refuse unless the caller explicitly opted in. See
+    // GHSA-44pg-86fc-fc7q.
+    #[cfg(target_os = "windows")]
+    if !opts.allow_windows_unenforced {
+        builder.skip(
+            "Windows profiling is default deny: it has no kernel level enforcement and runs untrusted MCP code unsandboxed. Re run with --profile-windows-unsafe to opt in.",
+        );
+        return Ok(builder.finish());
+    }
+
     let Transport::Stdio(stdio) = &provider.transport else {
         builder.skip("unsupported transport: only stdio MCP can be profiled");
         return Ok(builder.finish());
@@ -545,8 +562,15 @@ async fn run_windows_observational_server(
         }
     };
 
+    // Scrub the parent environment before spawning so ambient secrets are not
+    // leaked to the profiled server, matching the macOS and Linux paths. We
+    // then set only a minimal safe env (a minimal PATH plus USERPROFILE and the
+    // temp dir vars). No ambient parent env is inherited. See
+    // GHSA-44pg-86fc-fc7q.
     let mut child = Command::new(&plan.executable)
         .args(&plan.args)
+        .env_clear()
+        .env("PATH", WINDOWS_MINIMAL_PATH)
         .env("USERPROFILE", tempdir.join("home"))
         .env("TMPDIR", tempdir)
         .env("TMP", tempdir)
@@ -2674,6 +2698,7 @@ mod tests {
             evidence_prefix: "ev-linux-rigged".into(),
             timeout_per_tool_seconds: 5,
             timeout_total_seconds: 20,
+            ..Default::default()
         };
 
         let run = run_profiled_server(&plan, temp.path(), &opts)
@@ -2774,6 +2799,7 @@ mod tests {
             evidence_prefix: "ev-fallback".to_string(),
             timeout_per_tool_seconds: 1,
             timeout_total_seconds: 1,
+            ..Default::default()
         };
         let mut builder = ProfileBuilder::new(&provider, &opts);
         builder.skip(&format!(

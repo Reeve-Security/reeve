@@ -147,6 +147,12 @@ enum Commands {
         profile_timeout_per_tool: u64,
         #[arg(long, default_value_t = 120)]
         profile_timeout_total: u64,
+        /// Opt in to observational only Windows profiling. Windows has no
+        /// kernel level sandbox enforcement, so profiling spawns and drives
+        /// untrusted MCP code unsandboxed. Default deny without this flag.
+        /// No effect on macOS or Linux.
+        #[arg(long)]
+        profile_windows_unsafe: bool,
         #[arg(long)]
         policy_check: bool,
         #[arg(long, default_value = "default")]
@@ -359,6 +365,7 @@ struct ScanCommand {
     introspect_execute_yes: bool,
     profile_timeout_per_tool: u64,
     profile_timeout_total: u64,
+    profile_windows_unsafe: bool,
     policy_check: bool,
     policy_profile: String,
     dry_run: bool,
@@ -439,6 +446,7 @@ fn main() -> Result<()> {
             introspect_execute_yes,
             profile_timeout_per_tool,
             profile_timeout_total,
+            profile_windows_unsafe,
             policy_check,
             policy_profile,
             dry_run,
@@ -466,6 +474,7 @@ fn main() -> Result<()> {
             introspect_execute_yes,
             profile_timeout_per_tool,
             profile_timeout_total,
+            profile_windows_unsafe,
             policy_check,
             policy_profile,
             dry_run,
@@ -679,6 +688,7 @@ fn scan(cmd: ScanCommand) -> Result<()> {
             introspect_execute: cmd.introspect_execute,
             profile_timeout_per_tool_seconds: cmd.profile_timeout_per_tool,
             profile_timeout_total_seconds: cmd.profile_timeout_total,
+            profile_allow_windows_unenforced: cmd.profile_windows_unsafe,
             custom_surfaces: custom_surfaces.clone(),
             include_conversation_metadata: cmd.include_conversation_metadata,
             scan_conversation_secrets: cmd.scan_conversation_secrets,

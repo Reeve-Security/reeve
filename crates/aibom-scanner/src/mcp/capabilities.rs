@@ -62,16 +62,52 @@ fn derive_from_tool_names(tool_names: &[String], evidence_id: &str) -> Vec<Capab
     derive_from_lists(&json!({ "tools": tools }), evidence_id)
 }
 
+/// Gate on whether an absolute, config declared command may be executed
+/// locally during opt in introspection.
+///
+/// Trust assumption: the path is named in a discovered MCP config (the user's
+/// own client config), and the operator explicitly passed
+/// --introspect-execute. We still spawn with a scrubbed environment (see
+/// client::list_stdio) so no ambient secrets leak even to a trusted path.
+///
+/// We additionally refuse to spawn from world writable locations (anyone can
+/// replace the binary), and refuse relative or non file commands. We do not
+/// silently broaden the set: an absolute, non world writable file, or a known
+/// interpreter pointed at such a script, is the maximum.
 fn safe_to_spawn_locally(command: &str, args: &[String]) -> bool {
     let command_path = Path::new(command);
     if command_path.is_absolute() && command_path.is_file() {
-        return true;
+        return !is_world_writable(command_path);
     }
     if matches!(command, "python" | "python3" | "node") {
-        return args
-            .first()
-            .is_some_and(|arg| Path::new(arg).is_absolute() && Path::new(arg).is_file());
+        return args.first().is_some_and(|arg| {
+            let script = Path::new(arg);
+            script.is_absolute() && script.is_file() && !is_world_writable(script)
+        });
     }
+    false
+}
+
+/// Reject paths whose file or containing directory is world writable, since an
+/// attacker could swap the target before we exec it. On non unix targets we
+/// cannot cheaply inspect the mode, so we conservatively allow (the env scrub
+/// in client::list_stdio remains the primary control there).
+#[cfg(unix)]
+fn is_world_writable(path: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    let world_writable = |p: &Path| {
+        std::fs::metadata(p)
+            .map(|meta| meta.permissions().mode() & 0o002 != 0)
+            .unwrap_or(false)
+    };
+    if world_writable(path) {
+        return true;
+    }
+    path.parent().is_some_and(world_writable)
+}
+
+#[cfg(not(unix))]
+fn is_world_writable(_path: &Path) -> bool {
     false
 }
 

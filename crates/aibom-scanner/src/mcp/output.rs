@@ -44,6 +44,9 @@ pub struct ScanOptions {
     pub introspect_execute: bool,
     pub profile_timeout_per_tool_seconds: u64,
     pub profile_timeout_total_seconds: u64,
+    /// Opt in to observational only Windows profiling, which has no kernel level
+    /// enforcement. Default deny on Windows; ignored on macOS and Linux.
+    pub profile_allow_windows_unenforced: bool,
     pub custom_surfaces: Vec<discovery::CustomSurfaceSpec>,
     pub include_conversation_metadata: bool,
     pub scan_conversation_secrets: bool,
@@ -153,6 +156,7 @@ pub async fn scan_target_with_options(
                         evidence_prefix: format!("ev-{index:03}-sandbox"),
                         timeout_per_tool_seconds: opts.profile_timeout_per_tool_seconds,
                         timeout_total_seconds: opts.profile_timeout_total_seconds,
+                        allow_windows_unenforced: opts.profile_allow_windows_unenforced,
                     },
                 )
                 .await?;

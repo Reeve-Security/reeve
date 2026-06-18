@@ -138,6 +138,12 @@ pub struct ProfileOptions {
     pub scan_id: String,
     #[serde(default)]
     pub evidence_prefix: String,
+    /// Windows profiling is observational only (no kernel level enforcement),
+    /// so it spawns and drives the MCP server without a sandbox. It is default
+    /// deny: the caller must explicitly opt in by setting this to true (the CLI
+    /// flag --profile-windows-unsafe). Has no effect on macOS or Linux.
+    #[serde(default)]
+    pub allow_windows_unenforced: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
