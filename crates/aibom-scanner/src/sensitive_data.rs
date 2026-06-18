@@ -1027,8 +1027,12 @@ fn sensitive_data_report_value(input: SensitiveDataReportBuild<'_>) -> Result<Va
     // Surface skipped files as auditable telemetry. Omit the key entirely when
     // nothing was skipped so normal reports keep their existing shape (#6).
     if !input.skipped.is_empty() {
-        report["sensitiveDataReport"]["skipped"] =
-            input.skipped.iter().map(skipped_value).collect::<Vec<_>>().into();
+        report["sensitiveDataReport"]["skipped"] = input
+            .skipped
+            .iter()
+            .map(skipped_value)
+            .collect::<Vec<_>>()
+            .into();
     }
     Ok(report)
 }
@@ -2549,7 +2553,11 @@ enabled = true
             "oversized file must not appear as a scanned finding"
         );
         // The oversized file is reported as a skip with the right reason and size.
-        assert_eq!(result.skipped.len(), 1, "exactly one file should be skipped");
+        assert_eq!(
+            result.skipped.len(),
+            1,
+            "exactly one file should be skipped"
+        );
         let skip = &result.skipped[0];
         assert_eq!(skip.reason, SkipReason::FileTooLarge);
         assert_eq!(skip.size_bytes, cap + 1);
