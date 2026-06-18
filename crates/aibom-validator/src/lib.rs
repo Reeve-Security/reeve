@@ -651,6 +651,8 @@ fn validate_attestation(
     }
 
     let mut subject_names = HashSet::new();
+    let mut subject_digests: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
     for (subject_index, subject) in subjects.iter().enumerate() {
         let name = subject
             .pointer("/name")
@@ -677,6 +679,12 @@ fn validate_attestation(
                 format!("/dsseEnvelope/payload[decoded]/subject/{subject_index}/digest"),
             ));
         }
+        let sha256 = digest
+            .get("sha256")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        subject_digests.insert(name.to_string(), sha256);
     }
 
     let roles = statement
@@ -725,6 +733,55 @@ fn validate_attestation(
         ));
     }
 
+    // Bind the DSSE subject digests to the actual artifact bytes on disk. The shape
+    // checks above only prove the statement is well formed; without this binding a stale
+    // or forged attestation whose subject sha256 does not match the real artifact would
+    // pass. See GHSA-mjjm-8wx7-m38f.
+    let aibom_name = aibom_filename(aibom_path);
+    let mut expected_names: HashSet<String> = HashSet::new();
+    expected_names.insert(aibom_name.to_string());
+    if let Some(cdx_path) = cdx_path {
+        expected_names.insert(aibom_filename(cdx_path).to_string());
+    }
+
+    // Every subject must be one of the two expected artifact filenames. This rejects a
+    // subject carrying an unexpected name as well as a missing artifact masked by a
+    // duplicate or extra entry.
+    if subject_names != expected_names {
+        return Err(failure(
+            ValidationStage::AttestationBinding,
+            ErrorCode::AttestationSubjectNameUnexpected,
+            "/dsseEnvelope/payload[decoded]/subject",
+        ));
+    }
+
+    let aibom_bytes = fs::read(aibom_path).map_err(|error| harness_failure(error.to_string()))?;
+    bind_subject_digest(&subject_digests, aibom_name, &aibom_bytes)?;
+    if let Some(cdx_path) = cdx_path {
+        let cdx_bytes = fs::read(cdx_path).map_err(|error| harness_failure(error.to_string()))?;
+        bind_subject_digest(&subject_digests, aibom_filename(cdx_path), &cdx_bytes)?;
+    }
+
+    Ok(())
+}
+
+// Require the recorded subject digest for `name` to equal the sha256 of `bytes`. The
+// hex comparison is case insensitive to match the lowercase convention emitted elsewhere
+// while tolerating an uppercase attestation.
+fn bind_subject_digest(
+    subject_digests: &std::collections::HashMap<String, String>,
+    name: &str,
+    bytes: &[u8],
+) -> Result<(), ValidationFailure> {
+    let expected = sha256_hex(bytes);
+    let recorded = subject_digests.get(name).map(String::as_str).unwrap_or("");
+    if !recorded.eq_ignore_ascii_case(&expected) {
+        return Err(failure(
+            ValidationStage::AttestationBinding,
+            ErrorCode::AttestationSubjectDigestMismatch,
+            "/dsseEnvelope/payload[decoded]/subject",
+        ));
+    }
     Ok(())
 }
 
@@ -918,7 +975,7 @@ mod tests {
             .filter(|outcome| !matches!(outcome.result, FixtureResult::Passed))
             .collect();
         assert!(failures.is_empty(), "fixture failures: {failures:#?}");
-        assert_eq!(outcomes.len(), 41);
+        assert_eq!(outcomes.len(), 44);
     }
 
     #[test]

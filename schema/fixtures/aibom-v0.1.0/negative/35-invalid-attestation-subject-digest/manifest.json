@@ -1,0 +1,13 @@
+{
+  "name": "35-invalid-attestation-subject-digest",
+  "kind": "negative",
+  "expected": "verify-reject",
+  "rejectStage": "attestation-binding",
+  "expectedErrorCode": "attestation.subject_digest_mismatch",
+  "rejectPointer": "/dsseEnvelope/payload[decoded]/subject",
+  "invariants": [
+    "Q4.v"
+  ],
+  "description": "The DSSE statement is well formed and passes every shape check: exactly two subjects, valid digest algorithm, matching artifactRoles. The aibom subject sha256 is a forged value (deadbeef...) that does not match the real fixture-35.aibom.json bytes. This is the stale-or-forged attestation case from GHSA-mjjm-8wx7-m38f: prior to digest binding the validator accepted any sha256 value as long as the shape was correct.",
+  "notes": "Verification must bind subject digests to artifact bytes, not just check shape. The cdx subject digest is correct so only the aibom subject triggers the rejection."
+}

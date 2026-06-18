@@ -1,0 +1,13 @@
+{
+  "name": "36-invalid-attestation-subject-name",
+  "kind": "negative",
+  "expected": "verify-reject",
+  "rejectStage": "attestation-binding",
+  "expectedErrorCode": "attestation.subject_name_unexpected",
+  "rejectPointer": "/dsseEnvelope/payload[decoded]/subject",
+  "invariants": [
+    "Q4.v"
+  ],
+  "description": "A sidecar-only scan with no CycloneDX artifact on disk. The DSSE statement carries two subjects: the real fixture-36.aibom.json and a second subject named attacker-supplied.cdx.json that is not one of the expected artifact filenames. Before digest binding the shape checks passed (count is two, artifactRoles match the subject names, and the cyclonedx role is not required to exist on disk when no cdx is provided), so a forged second artifact slipped through. Binding rejects any subject whose name is not an expected artifact filename.",
+  "notes": "Demonstrates that the expected subject set must be exactly the artifacts actually validated. Here only fixture-36.aibom.json is expected; the extra subject is unexpected."
+}
