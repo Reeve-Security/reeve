@@ -9,7 +9,11 @@
 # no GHSA IDs are baked into the repo.
 #
 # usage:
-#   scripts/advisory-publish-gate.sh <X.Y.Z> [GHSA-... ...] [--allow-published]
+#   scripts/advisory-publish-gate.sh <X.Y.Z> <GHSA-...> [GHSA-... ...] [--allow-published]
+#   scripts/advisory-publish-gate.sh <X.Y.Z> --release-only   (audit: skip advisory checks)
+#
+# At least one GHSA id is REQUIRED by default; running without one defeats the
+# gate, so it fails unless you explicitly pass --release-only for a release-only audit.
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
@@ -17,10 +21,12 @@ cd "${REPO_ROOT}"
 
 VERSION=""
 ALLOW_PUBLISHED=0
+RELEASE_ONLY=0
 ADVISORIES=()
 for arg in "$@"; do
   case "${arg}" in
     --allow-published) ALLOW_PUBLISHED=1 ;;
+    --release-only) RELEASE_ONLY=1 ;;
     GHSA-*) ADVISORIES+=("${arg}") ;;
     *)
       if [ -z "${VERSION}" ] && printf '%s' "${arg}" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
@@ -95,7 +101,11 @@ echo "    ok: all signable assets have a .bundle"
 
 step "advisories point at fixed version ${VERSION} and are still draft"
 if [ "${#ADVISORIES[@]}" -eq 0 ]; then
-  warn "no GHSA ids passed; skipping advisory checks (pass them as args to verify)"
+  if [ "${RELEASE_ONLY}" -eq 1 ]; then
+    warn "release-only audit: advisory checks skipped by explicit --release-only"
+  else
+    fail "at least one GHSA id is required (pass them as args), or use --release-only for a release-only audit"
+  fi
 else
   for ghsa in "${ADVISORIES[@]}"; do
     adv="$(gh api "repos/${slug}/security-advisories/${ghsa}" 2>/dev/null || true)"

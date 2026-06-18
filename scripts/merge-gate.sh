@@ -42,6 +42,18 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# --- when checking a PR, fail fast on the wrong branch BEFORE local checks ---
+
+if [ -n "${PR}" ]; then
+  step "verify local HEAD == PR #${PR} head SHA"
+  local_head="$(git rev-parse HEAD)"
+  pr_head="$(gh pr view "${PR}" --json headRefOid -q .headRefOid)" || fail "could not read PR #${PR} head SHA"
+  if [ "${local_head}" != "${pr_head}" ]; then
+    fail "local HEAD ${local_head} != PR #${PR} head ${pr_head}; checkout/update the PR branch so local and GitHub checks prove the same commit"
+  fi
+  echo "    ok: ${local_head}"
+fi
+
 # --- local checks: call the real scripts/commands, in CI order ---------------
 
 step "cargo fmt --all -- --check"
@@ -108,15 +120,7 @@ if [ -z "${PR}" ]; then
   exit 0
 fi
 
-# --- remote proof: same commit, named required checks green ------------------
-
-step "verify local HEAD == PR #${PR} head SHA"
-local_head="$(git rev-parse HEAD)"
-pr_head="$(gh pr view "${PR}" --json headRefOid -q .headRefOid)" || fail "could not read PR #${PR} head SHA"
-if [ "${local_head}" != "${pr_head}" ]; then
-  fail "local HEAD ${local_head} != PR #${PR} head ${pr_head}; checkout/update the PR branch so local and GitHub checks prove the same commit"
-fi
-echo "    ok: ${local_head}"
+# --- remote proof: named required checks green (HEAD==PR head verified above) -
 
 step "verify required GitHub checks are green for PR #${PR}"
 checks_json="$(gh pr checks "${PR}" --json name,bucket 2>/dev/null || true)"
