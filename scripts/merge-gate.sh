@@ -88,6 +88,9 @@ python3 scripts/check-private-boundary.py || fail "private boundary"
 step "tools OSS readiness contract"
 python3 scripts/check-tools-oss-readiness.py || fail "tools OSS readiness"
 
+step "docs-only paths-ignore helper self-test"
+python3 scripts/pr-docs-only.py --self-test || fail "pr-docs-only self-test (helper / ci.yml paths-ignore drift)"
+
 step "release sensitive-data flags contract"
 artifacts_dir="$(mktemp -d)"
 stage_dir="$(mktemp -d)"
@@ -122,6 +125,24 @@ if [ -z "${PR}" ]; then
   echo "merge-gate: reminder: remote CI (windows release smoke, gitleaks) must also be green before merge"
   exit 0
 fi
+
+# --- docs-only / paths-ignored escape hatch ----------------------------------
+# A docs-only PR (every changed path matches ci.yml's pull_request paths-ignore)
+# intentionally skips the heavy CI jobs, so the named required checks are absent
+# by design, not by failure. Only when GitHub independently reports the PR as
+# CLEAN do we treat the required-checks requirement as N/A. Normal PRs, and any
+# docs-only PR that is NOT CLEAN, still go through the strict loop below.
+
+step "classify PR #${PR} (docs-only paths-ignored?)"
+changed_files="$(gh pr view "${PR}" --json files -q '.files[].path')" || fail "could not read changed files for PR #${PR}"
+merge_state="$(gh pr view "${PR}" --json mergeStateStatus -q .mergeStateStatus)" || fail "could not read merge state for PR #${PR}"
+if printf '%s\n' "${changed_files}" | python3 scripts/pr-docs-only.py && [ "${merge_state}" = "CLEAN" ]; then
+  echo "    docs-only paths-ignored PR; heavy CI intentionally skipped by ci.yml paths-ignore; GitHub mergeable=CLEAN; required-checks requirement N/A"
+  echo ""
+  echo "merge-gate: PR #${PR} docs-only paths-ignored and CLEAN; local checks passed, required-checks N/A"
+  exit 0
+fi
+echo "    not a docs-only+CLEAN PR (mergeStateStatus=${merge_state}); enforcing strict required checks"
 
 # --- remote proof: named required checks green (HEAD==PR head verified above) -
 
