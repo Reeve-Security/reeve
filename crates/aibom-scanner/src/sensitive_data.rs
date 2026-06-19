@@ -1301,19 +1301,20 @@ fn count_jwts(content: &str) -> u64 {
 }
 
 fn count_oauth_client_secrets(content: &str) -> u64 {
-    content
-        .lines()
-        .filter(|line| {
-            let lower = line.to_ascii_lowercase();
-            (lower.contains("client_secret")
-                || (lower.contains("oauth") && lower.contains("secret")))
-                && candidate_tokens(line).any(|token| {
-                    token.len() >= 16
-                        && token
-                            .chars()
-                            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.'))
-                })
-        })
+    static OAUTH_CLIENT_SECRET: OnceLock<Regex> = OnceLock::new();
+    let regex = OAUTH_CLIENT_SECRET.get_or_init(|| {
+        RegexBuilder::new(
+            r#"\b(?:oauth[_-]?client[_-]?secret|client[_-]?secret|oauth[_-]?secret)\b["']?\s*[:=]\s*["']?([A-Za-z0-9][A-Za-z0-9_.-]{15,})"#,
+        )
+        .case_insensitive(true)
+        .size_limit(1_000_000)
+        .build()
+        .expect("built-in OAuth client-secret regex compiles")
+    });
+    regex
+        .captures_iter(content)
+        .filter_map(|captures| captures.get(1).map(|matched| matched.as_str()))
+        .filter(|token| has_plausible_secret_body(token, &[]))
         .count() as u64
 }
 
@@ -2092,6 +2093,56 @@ enabled = true
     }
 
     #[test]
+    fn oauth_client_secret_rule_requires_secret_key_value_shape() {
+        let root = tempdir().unwrap();
+        let out = tempdir().unwrap();
+        let oauth_secret = fixture_oauth_client_secret();
+        write_fixture(
+            root.path(),
+            ".claude/projects/OAuthPositive/transcript.jsonl",
+            &format!("client_secret = {oauth_secret}\n"),
+        );
+        write_fixture(
+            root.path(),
+            ".claude/projects/OAuthNegative/transcript.jsonl",
+            "note=\"docs mention client_secret here\" request_id=01HY7R4BNFX9J7MM2Y8VD2AE7Q session_hash=2f8c9a7b6d5e4f301928374650abcdef\n",
+        );
+        let target = Target::filesystem(root.path().to_path_buf());
+
+        let path = write_sensitive_data_report(
+            &target,
+            out.path(),
+            "scan-test",
+            "2026-05-11T10:00:00Z",
+            &SensitiveDataScanOptions {
+                scan_conversation_secrets: true,
+                suppressions_file: None,
+                conversation_rules_file: None,
+            },
+        )
+        .unwrap();
+        let report: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+        let report_text = serde_json::to_string(&report).unwrap();
+        let findings = report["sensitiveDataReport"]["findings"]
+            .as_array()
+            .unwrap();
+        let oauth_findings = findings
+            .iter()
+            .filter(|finding| finding["patternClass"] == "oauth-client-secret")
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            oauth_findings.len(),
+            1,
+            "only the actual client_secret key/value should fire: {oauth_findings:?}"
+        );
+        assert_eq!(oauth_findings[0]["matchCount"], 1);
+        assert!(!report_text.contains(&oauth_secret));
+        assert!(!report_text.contains("OAuthPositive"));
+        assert!(!report_text.contains("OAuthNegative"));
+    }
+
+    #[test]
     fn default_secret_rules_ignore_placeholder_and_low_entropy_examples() {
         let root = tempdir().unwrap();
         let out = tempdir().unwrap();
@@ -2499,6 +2550,10 @@ enabled = true
 
     fn fixture_stripe_key() -> String {
         "sk_live_vB7qL9mR2xT6pW4zY8nC0dE5fG1h".to_string()
+    }
+
+    fn fixture_oauth_client_secret() -> String {
+        "Q7mZ9pL2xT6vN4cR8sU0wY3aB5dE1fG9".to_string()
     }
 
     #[test]
