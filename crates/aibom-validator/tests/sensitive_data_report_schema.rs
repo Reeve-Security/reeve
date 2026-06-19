@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use serde_json::Value;
 
-const EXPECTED_POSITIVE_FIXTURES: usize = 8;
+const EXPECTED_POSITIVE_FIXTURES: usize = 10;
 const EXPECTED_NEGATIVE_FIXTURES: usize = 6;
 const FORBIDDEN_PRIVACY_FIELDS: &[&str] = &[
     "contentSnippet",
@@ -160,6 +160,93 @@ fn sensitive_data_report_privacy_field_fixtures_are_explicit() {
             "expected negative fixture exercising forbidden field {field}"
         );
     }
+}
+
+#[test]
+fn incomplete_coverage_and_binary_skip_fixture_validates() {
+    // The streaming coverage-gap report shape (#13) validates against the
+    // schema: an explicit incompleteCoverage summary plus a binary skip entry.
+    let validator = validator();
+    let path = repo_root()
+        .join("schema/fixtures/sensitive-data-report/positive/streaming-incomplete-coverage.json");
+    let report: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    assert!(
+        validator.is_valid(&report),
+        "{} should validate",
+        path.display()
+    );
+    let body = &report["sensitiveDataReport"];
+    assert_eq!(
+        body["incompleteCoverage"]["reason"],
+        "total-byte-budget-exceeded"
+    );
+    assert!(
+        body["incompleteCoverage"]["unscannedFileCount"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    assert_eq!(body["skipped"][0]["reason"], "binary");
+}
+
+#[test]
+fn rule_coverage_warning_fixture_validates_and_carries_warning() {
+    // A streaming report that flags a customer rule whose match span may exceed
+    // the streaming window validates against the schema and surfaces the
+    // coverage limitation as auditable telemetry rather than a silent
+    // under-match (#13).
+    let validator = validator();
+    let path = repo_root().join(
+        "schema/fixtures/sensitive-data-report/positive/streaming-rule-coverage-warning.json",
+    );
+    let report: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    assert!(
+        validator.is_valid(&report),
+        "{} should validate",
+        path.display()
+    );
+    let warnings = report["sensitiveDataReport"]["ruleCoverageWarnings"]
+        .as_array()
+        .unwrap();
+    assert_eq!(warnings.len(), 1);
+    assert_eq!(
+        warnings[0]["reason"],
+        "match-span-may-exceed-streaming-window"
+    );
+    assert!(!warnings[0]["ruleId"].as_str().unwrap().is_empty());
+}
+
+#[test]
+fn invalid_rule_coverage_warning_reason_is_rejected() {
+    // An unknown ruleCoverageWarning reason must fail the schema so the field
+    // stays a closed enum (#13).
+    let validator = validator();
+    let path = repo_root().join(
+        "schema/fixtures/sensitive-data-report/positive/streaming-rule-coverage-warning.json",
+    );
+    let mut report: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    report["sensitiveDataReport"]["ruleCoverageWarnings"][0]["reason"] =
+        Value::String("some-unknown-reason".to_string());
+    assert!(
+        !validator.is_valid(&report),
+        "unknown ruleCoverageWarning reason must fail validation"
+    );
+}
+
+#[test]
+fn invalid_skip_reason_is_rejected() {
+    // A report carrying the retired file-too-large skip reason must fail the
+    // schema now that oversized files are streamed (#13).
+    let validator = validator();
+    let path = repo_root()
+        .join("schema/fixtures/sensitive-data-report/positive/streaming-incomplete-coverage.json");
+    let mut report: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    report["sensitiveDataReport"]["skipped"][0]["reason"] =
+        Value::String("file-too-large".to_string());
+    assert!(
+        !validator.is_valid(&report),
+        "retired skip reason file-too-large must fail validation"
+    );
 }
 
 fn fixture_paths(kind: &str) -> Vec<PathBuf> {

@@ -105,13 +105,48 @@
         },
         "skipped": {
           "type": "array",
-          "description": "Conversation files not read during the content scan because a per-file size cap or the cumulative read budget was exceeded. Recorded as auditable telemetry so a skip is never a silent drop. Carries redacted path and size only, never file content. Omitted when nothing was skipped. Sorted by surface, redacted path, then reason.",
+          "description": "Conversation files not scanned as text during the content scan because the content is genuinely unscannable (binary / undecodable, for example a NUL byte). Oversized files are streamed in bounded chunks rather than skipped, and total-byte-budget truncation is reported via incompleteCoverage, so binary content is the only skip reason. Recorded as auditable telemetry so a skip is never a silent drop. Carries redacted path and size only, never file content. Omitted when nothing was skipped. Sorted by surface, redacted path, then reason.",
           "items": {
             "$ref": "#/$defs/skippedFile"
           }
         },
+        "incompleteCoverage": {
+          "$ref": "#/$defs/incompleteCoverage"
+        },
+        "ruleCoverageWarnings": {
+          "type": "array",
+          "description": "Rules whose match span may exceed the fixed streaming window and that were applied to an oversized (streamed) file. Fixed-window streaming cannot guarantee an arbitrary unbounded customer regex catches a match straddling a chunk boundary, so rather than silently under-match, the rule is surfaced here as an auditable coverage limitation. Built-in token rules are short and the private-key-pem block is handled by a stateful marker scanner, so neither appears here. Omitted when no such rule applied. Sorted by rule id.",
+          "items": {
+            "$ref": "#/$defs/ruleCoverageWarning"
+          }
+        },
         "signature": {
           "$ref": "#/$defs/signatureReference"
+        }
+      }
+    },
+    "ruleCoverageWarning": {
+      "type": "object",
+      "required": [
+        "patternClass",
+        "reason",
+        "ruleId"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "ruleId": {
+          "type": "string",
+          "minLength": 1
+        },
+        "patternClass": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+        },
+        "reason": {
+          "type": "string",
+          "enum": [
+            "match-span-may-exceed-streaming-window"
+          ]
         }
       }
     },
@@ -138,9 +173,34 @@
         "reason": {
           "type": "string",
           "enum": [
-            "file-too-large",
-            "total-budget-exceeded"
+            "binary"
           ]
+        }
+      }
+    },
+    "incompleteCoverage": {
+      "type": "object",
+      "description": "Explicit coverage gap recorded when the total-byte runtime budget stopped the scan before every file was read. The total-byte budget is a runtime/I-O bound, not a memory control, so truncation is reported here as an auditable summary rather than a silent stop or a per-file skip. Omitted when the scan read every matching file.",
+      "required": [
+        "reason",
+        "unscannedByteCount",
+        "unscannedFileCount"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "type": "string",
+          "enum": [
+            "total-byte-budget-exceeded"
+          ]
+        },
+        "unscannedFileCount": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "unscannedByteCount": {
+          "type": "integer",
+          "minimum": 0
         }
       }
     },

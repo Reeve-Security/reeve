@@ -13,6 +13,9 @@ base64.workspace = true
 chrono.workspace = true
 glob.workspace = true
 regex = "1"
+# Pinned to the version `regex` resolves so the AST `maximum_len()` bound used
+# for streaming-span coverage matches the engine actually compiling the rule.
+regex-syntax = "0.8"
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
