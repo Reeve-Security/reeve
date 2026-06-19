@@ -21,12 +21,43 @@ const DEFAULT_RULE_PACK_VERSION: &str = "2026.06.0";
 const DEFAULT_RULE_PACK_CANONICAL: &str = "reeve-default-conversation-secrets@2026.06.0:anthropic-api-key,aws-access-key,jwt,oauth-client-secret,openai-api-key,private-key-pem,stripe-key";
 const MIN_SECRET_BODY_ENTROPY: f64 = 2.5;
 // Bound memory for the conversation content scan so a single huge file or a
-// flood of medium files cannot exhaust RAM or stall a fleet/MDM scan (#6).
-// Files over the per-file cap are skipped without ever being read into memory.
-// Once the cumulative read budget is exhausted the scan stops reading further
-// files and records that it was truncated.
+// flood of medium files cannot exhaust RAM or stall a fleet/MDM scan (#6, #13).
+// Files at or under the per-file cap take the whole-read path. Files over the
+// cap are streamed in bounded chunks (constant memory) rather than skipped, so
+// a secret in a large transcript is still detected (#13). The total-byte budget
+// is a runtime/I-O bound, not a memory control: once it is exceeded the scan
+// stops reading further files and records an explicit incomplete-coverage
+// summary so the gap is auditable, never a silent drop.
 const MAX_CONVERSATION_FILE_BYTES: u64 = 16 * 1024 * 1024;
 const MAX_CONVERSATION_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
+// Streaming window size for oversized files. Only one chunk plus the overlap
+// carry are held in memory at once, so peak memory is bounded regardless of
+// file size (#13).
+const CONVERSATION_SCAN_CHUNK_BYTES: usize = 1024 * 1024;
+// Bytes of the previous window carried forward so a secret straddling a chunk
+// boundary is still matched. This MUST be at least as large as the longest
+// secret any rule can match; otherwise a long secret split across a boundary
+// could be missed. The default rules match short tokens (AWS 20 bytes, JWTs,
+// stripe/anthropic/openai keys) and PEM blocks; an 8 KiB carry comfortably
+// exceeds a single-line key and a wrapped PEM header/footer pair, and customer
+// regex rule bodies are capped at 4096 bytes by load_customer_rule_pack (#13).
+const CONVERSATION_SCAN_OVERLAP_BYTES: usize = 8 * 1024;
+// Fixed-window streaming can dedup a match across a chunk boundary only when the
+// match span is no larger than the overlap carry: a match longer than the carry
+// could begin before the carried region and end after it, so the
+// "end > carry_len" dedup test cannot tell whether the previous window already
+// counted it. We therefore bound the guaranteed-correct match span to the
+// overlap size. Built-in token rules match short tokens (<= a few dozen bytes),
+// so they are always within this bound. The PEM block rule is unbounded but is
+// handled out of band by a dedicated stateful marker scanner on the streaming
+// path (see PemMarkerScanner), so it does not rely on this bound. Customer regex
+// rules whose match span could exceed this bound cannot be guaranteed on the
+// streaming path; rather than silently under-match, such a rule is flagged at
+// load and surfaced as an explicit ruleCoverageWarning when applied to an
+// oversized (streamed) file (#13).
+const MAX_MATCH_SPAN: usize = CONVERSATION_SCAN_OVERLAP_BYTES;
+const PEM_PRIVATE_KEY_PATTERN_CLASS: &str = "private-key-pem";
+const RULE_COVERAGE_WARNING_SPAN_EXCEEDS_WINDOW: &str = "match-span-may-exceed-streaming-window";
 const KNOWN_PLACEHOLDER_SECRET_TOKENS: &[&str] =
     &["AKIAIOSFODNN7EXAMPLE", "AKIAIOSFODNN7EXAMPLEFAKE"];
 const PLACEHOLDER_SECRET_MARKERS: &[&str] = &["example", "dummy", "placeholder", "fake"];
@@ -230,9 +261,12 @@ struct PatternFinding {
     suppression_id: Option<String>,
 }
 
-// Non-fatal notice that a conversation file was not read during the content
-// scan. Surfaced in the report so a skip is auditable telemetry, not a silent
-// drop. Carries only the redacted path and size, never file content (#6).
+// Non-fatal notice that a conversation file was not scanned as text during the
+// content scan. Surfaced in the report so a skip is auditable telemetry, not a
+// silent drop. Carries only the redacted path and size, never file content. The
+// only skip reason now is genuinely unscannable binary content; oversized files
+// are streamed, and total-budget truncation is reported via the explicit
+// incomplete-coverage summary instead of a per-file skip (#6, #13).
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SkippedFile {
     surface: &'static str,
@@ -243,25 +277,54 @@ struct SkippedFile {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SkipReason {
-    FileTooLarge,
-    TotalBudgetExceeded,
+    BinarySkipped,
 }
 
 impl SkipReason {
     fn as_str(self) -> &'static str {
         match self {
-            SkipReason::FileTooLarge => "file-too-large",
-            SkipReason::TotalBudgetExceeded => "total-budget-exceeded",
+            SkipReason::BinarySkipped => "binary",
         }
     }
 }
 
-// Per-scan memory bounds. Overridable so a hermetic test can exercise the skip
-// path with a small file instead of writing hundreds of megabytes (#6).
+// Explicit record that the total-byte runtime budget stopped the scan before
+// every file was read. This is the source of truth for the coverage gap: it
+// counts how many files and bytes went unscanned and why, so a truncated scan
+// is auditable rather than a silent stop (#13).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct IncompleteCoverage {
+    reason: &'static str,
+    unscanned_file_count: u64,
+    unscanned_byte_count: u64,
+}
+
+const INCOMPLETE_COVERAGE_TOTAL_BYTE_BUDGET: &str = "total-byte-budget-exceeded";
+
+// Explicit record that a customer rule whose match span could exceed the
+// streaming window was applied to an oversized (streamed) file. Fixed-window
+// streaming cannot guarantee an arbitrary unbounded regex catches a match that
+// straddles a chunk boundary, so rather than silently under-match we surface the
+// rule id and reason here and warn at load. This is auditable telemetry, never a
+// silent drop (#13). One entry per (rule id) regardless of how many oversized
+// files it touched; the warning is about the rule's coverage, not a file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct RuleCoverageWarning {
+    rule_id: String,
+    pattern_class: String,
+    reason: &'static str,
+}
+
+// Per-scan bounds. Overridable so a hermetic test can force the streaming path
+// and the budget summary with tiny files instead of writing hundreds of
+// megabytes (#6, #13). chunk_bytes and overlap_bytes are tunable in tests so a
+// boundary-straddling secret can be planted at a small, known chunk size.
 #[derive(Debug, Clone, Copy)]
 struct ConversationScanLimits {
     max_file_bytes: u64,
     max_total_bytes: u64,
+    chunk_bytes: usize,
+    overlap_bytes: usize,
 }
 
 impl Default for ConversationScanLimits {
@@ -269,6 +332,8 @@ impl Default for ConversationScanLimits {
         Self {
             max_file_bytes: MAX_CONVERSATION_FILE_BYTES,
             max_total_bytes: MAX_CONVERSATION_TOTAL_BYTES,
+            chunk_bytes: CONVERSATION_SCAN_CHUNK_BYTES,
+            overlap_bytes: CONVERSATION_SCAN_OVERLAP_BYTES,
         }
     }
 }
@@ -277,6 +342,8 @@ impl Default for ConversationScanLimits {
 struct ConversationScanResult {
     findings: Vec<PatternFinding>,
     skipped: Vec<SkippedFile>,
+    incomplete_coverage: Option<IncompleteCoverage>,
+    rule_coverage_warnings: Vec<RuleCoverageWarning>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -284,7 +351,17 @@ struct BuiltInSecretRule {
     pattern_class: &'static str,
     rule_id: &'static str,
     confidence: &'static str,
-    matcher: fn(&str) -> u64,
+    matcher: BuiltInMatcher,
+}
+
+// A built-in rule exposes both a whole-content count and a match-end-offset
+// iterator. The streaming path needs end offsets to dedup across the overlap
+// carry; both must agree on what a match is so stream-count equals whole-read
+// count (#13).
+#[derive(Debug, Clone, Copy)]
+struct BuiltInMatcher {
+    count: fn(&str) -> u64,
+    ends: fn(&str) -> Vec<usize>,
 }
 
 const DEFAULT_SECRET_RULES: &[BuiltInSecretRule] = &[
@@ -292,43 +369,64 @@ const DEFAULT_SECRET_RULES: &[BuiltInSecretRule] = &[
         pattern_class: "anthropic-api-key",
         rule_id: "reeve.default.anthropic-api-key",
         confidence: "high",
-        matcher: count_anthropic_keys,
+        matcher: BuiltInMatcher {
+            count: count_anthropic_keys,
+            ends: anthropic_key_ends,
+        },
     },
     BuiltInSecretRule {
         pattern_class: "aws-access-key",
         rule_id: "reeve.default.aws-access-key",
         confidence: "high",
-        matcher: count_aws_access_keys,
+        matcher: BuiltInMatcher {
+            count: count_aws_access_keys,
+            ends: aws_access_key_ends,
+        },
     },
     BuiltInSecretRule {
         pattern_class: "jwt",
         rule_id: "reeve.default.jwt",
         confidence: "medium",
-        matcher: count_jwts,
+        matcher: BuiltInMatcher {
+            count: count_jwts,
+            ends: jwt_ends,
+        },
     },
     BuiltInSecretRule {
         pattern_class: "oauth-client-secret",
         rule_id: "reeve.default.oauth-client-secret",
         confidence: "medium",
-        matcher: count_oauth_client_secrets,
+        matcher: BuiltInMatcher {
+            count: count_oauth_client_secrets,
+            ends: oauth_client_secret_ends,
+        },
     },
     BuiltInSecretRule {
         pattern_class: "openai-api-key",
         rule_id: "reeve.default.openai-api-key",
         confidence: "high",
-        matcher: count_openai_keys,
+        matcher: BuiltInMatcher {
+            count: count_openai_keys,
+            ends: openai_key_ends,
+        },
     },
     BuiltInSecretRule {
         pattern_class: "private-key-pem",
         rule_id: "reeve.default.private-key-pem",
         confidence: "high",
-        matcher: count_private_key_pem_blocks,
+        matcher: BuiltInMatcher {
+            count: count_private_key_pem_blocks,
+            ends: private_key_pem_block_ends,
+        },
     },
     BuiltInSecretRule {
         pattern_class: "stripe-key",
         rule_id: "reeve.default.stripe-key",
         confidence: "high",
-        matcher: count_stripe_keys,
+        matcher: BuiltInMatcher {
+            count: count_stripe_keys,
+            ends: stripe_key_ends,
+        },
     },
 ];
 
@@ -339,19 +437,42 @@ struct CompiledSecretRule {
     rule_pack_version: String,
     confidence: String,
     matcher: SecretRuleMatcher,
+    // True when the rule's regex could match a span larger than MAX_MATCH_SPAN,
+    // so fixed-window streaming cannot guarantee it catches a boundary-straddling
+    // match. Set only for customer regex rules at load (built-in token rules are
+    // short; the PEM block is handled by the stateful marker scanner). When such
+    // a rule runs on the streaming path, an explicit ruleCoverageWarning is
+    // recorded instead of a silent under-match (#13).
+    streaming_span_unbounded: bool,
 }
 
 #[derive(Debug, Clone)]
 enum SecretRuleMatcher {
-    BuiltIn(fn(&str) -> u64),
+    BuiltIn(BuiltInMatcher),
     Regex(Regex),
 }
 
 impl CompiledSecretRule {
     fn count(&self, content: &str) -> u64 {
         match &self.matcher {
-            SecretRuleMatcher::BuiltIn(matcher) => matcher(content),
+            SecretRuleMatcher::BuiltIn(matcher) => (matcher.count)(content),
             SecretRuleMatcher::Regex(regex) => regex.find_iter(content).count() as u64,
+        }
+    }
+
+    // Byte end offsets of every match in `content`. Used by the streaming path
+    // to dedup matches across the carried overlap region: a match counts in a
+    // window only when its end offset lands beyond the overlap already counted
+    // in the previous window (#13). End offsets are returned (not start) because
+    // a match that the previous window truncated at the boundary must be counted
+    // exactly once, in the window where it completes.
+    fn match_ends(&self, content: &str) -> Vec<usize> {
+        match &self.matcher {
+            SecretRuleMatcher::BuiltIn(matcher) => (matcher.ends)(content),
+            SecretRuleMatcher::Regex(regex) => regex
+                .find_iter(content)
+                .map(|matched| matched.end())
+                .collect(),
         }
     }
 }
@@ -463,6 +584,8 @@ pub fn write_sensitive_data_report(
         surfaces: &surfaces,
         findings: &scan_result.findings,
         skipped: &scan_result.skipped,
+        incomplete_coverage: scan_result.incomplete_coverage.as_ref(),
+        rule_coverage_warnings: &scan_result.rule_coverage_warnings,
         options,
         customer_rule_pack: customer_rule_pack.as_ref(),
     })?;
@@ -586,6 +709,13 @@ fn scan_conversation_findings_with_limits(
     let mut findings = Vec::new();
     let mut skipped = Vec::new();
     let mut total_read_bytes: u64 = 0;
+    let mut unscanned_file_count: u64 = 0;
+    let mut unscanned_byte_count: u64 = 0;
+    // Rule ids that ran on at least one oversized (streamed) file and whose match
+    // span may exceed the streaming window, recorded once per rule so the
+    // coverage limitation is auditable (#13).
+    let mut warned_rule_ids = BTreeSet::<String>::new();
+    let mut rule_coverage_warnings = Vec::new();
     for resolved in resolved_conversation_roots(target_root)? {
         let root = resolved.root;
         let root_path = resolved.path;
@@ -599,67 +729,101 @@ fn scan_conversation_findings_with_limits(
             }
             let metadata = entry.metadata()?;
             let file_size = metadata.len();
-            // Guard memory BEFORE reading. An oversized file is recorded as a
-            // skip and never loaded; reading it could exhaust RAM (#6).
-            if file_size > limits.max_file_bytes {
-                skipped.push(SkippedFile {
-                    surface: root.surface,
-                    redacted_path: redacted_file_path(entry.path(), &root_path, root),
-                    size_bytes: file_size,
-                    reason: SkipReason::FileTooLarge,
-                });
-                continue;
-            }
-            // A flood of in-range files must not exhaust memory either. Once
-            // the cumulative read budget would be exceeded, stop reading and
-            // record every remaining file as a budget skip (#6).
-            if total_read_bytes.saturating_add(file_size) > limits.max_total_bytes {
-                skipped.push(SkippedFile {
-                    surface: root.surface,
-                    redacted_path: redacted_file_path(entry.path(), &root_path, root),
-                    size_bytes: file_size,
-                    reason: SkipReason::TotalBudgetExceeded,
-                });
-                continue;
-            }
-            let bytes = fs::read(entry.path())?;
-            total_read_bytes = total_read_bytes.saturating_add(bytes.len() as u64);
-            let content = String::from_utf8_lossy(&bytes);
             let redacted_path = redacted_file_path(entry.path(), &root_path, root);
+            // Total-byte budget is a runtime/I-O bound, not a memory control.
+            // Once it is exhausted, stop reading further files and tally them
+            // into the explicit incomplete-coverage summary so the gap is
+            // auditable rather than a silent stop (#13).
+            if total_read_bytes >= limits.max_total_bytes {
+                unscanned_file_count += 1;
+                unscanned_byte_count = unscanned_byte_count.saturating_add(file_size);
+                continue;
+            }
             let last_modified = metadata
                 .modified()
                 .map(DateTime::<Utc>::from)
                 .unwrap_or_else(|_| DateTime::<Utc>::from(UNIX_EPOCH));
 
-            for rule in rules {
-                let match_count = rule.count(&content);
-                if match_count == 0 {
-                    continue;
+            // Per-rule match counts for this file. Small files take the
+            // whole-read path; oversized files are streamed in bounded chunks so
+            // a secret in a large transcript is still detected without loading
+            // the whole file into memory (#13).
+            let streamed = file_size > limits.max_file_bytes;
+            let scan = if streamed {
+                scan_file_streaming(entry.path(), rules, &limits)?
+            } else {
+                scan_file_whole(entry.path(), rules)?
+            };
+            total_read_bytes = total_read_bytes.saturating_add(scan.bytes_scanned);
+
+            // A customer rule whose match span may exceed the streaming window
+            // was applied on the streaming path: record the coverage limitation
+            // explicitly rather than letting a boundary-straddling match be
+            // silently under-counted (#13). Recorded even on a binary file: the
+            // rule still could not be guaranteed had the file been text.
+            if streamed {
+                for rule in rules.iter().filter(|rule| rule.streaming_span_unbounded) {
+                    if warned_rule_ids.insert(rule.rule_id.clone()) {
+                        rule_coverage_warnings.push(RuleCoverageWarning {
+                            rule_id: rule.rule_id.clone(),
+                            pattern_class: rule.pattern_class.clone(),
+                            reason: RULE_COVERAGE_WARNING_SPAN_EXCEEDS_WINDOW,
+                        });
+                    }
                 }
-                let suppression = matching_suppression(
-                    suppressions,
-                    root.surface,
-                    &redacted_path,
-                    &rule.rule_id,
-                    &rule.pattern_class,
-                );
-                findings.push(PatternFinding {
-                    finding_id: String::new(),
-                    surface: root.surface,
-                    redacted_path: redacted_path.clone(),
-                    size_bytes: metadata.len(),
-                    last_modified,
-                    pattern_class: rule.pattern_class.clone(),
-                    rule_id: rule.rule_id.clone(),
-                    rule_pack_version: rule.rule_pack_version.clone(),
-                    match_count,
-                    confidence: rule.confidence.clone(),
-                    suppressed: suppression.is_some(),
-                    suppression_id: suppression.map(|spec| spec.id.clone()),
-                });
+            }
+
+            match scan.outcome {
+                FileScanOutcome::Binary => {
+                    // NUL bytes / undecodable content: genuinely unscannable as
+                    // text, so record skip telemetry rather than streaming it.
+                    skipped.push(SkippedFile {
+                        surface: root.surface,
+                        redacted_path: redacted_path.clone(),
+                        size_bytes: file_size,
+                        reason: SkipReason::BinarySkipped,
+                    });
+                }
+                FileScanOutcome::Scanned(match_counts) => {
+                    for (rule, match_count) in rules.iter().zip(match_counts) {
+                        if match_count == 0 {
+                            continue;
+                        }
+                        let suppression = matching_suppression(
+                            suppressions,
+                            root.surface,
+                            &redacted_path,
+                            &rule.rule_id,
+                            &rule.pattern_class,
+                        );
+                        findings.push(PatternFinding {
+                            finding_id: String::new(),
+                            surface: root.surface,
+                            redacted_path: redacted_path.clone(),
+                            size_bytes: file_size,
+                            last_modified,
+                            pattern_class: rule.pattern_class.clone(),
+                            rule_id: rule.rule_id.clone(),
+                            rule_pack_version: rule.rule_pack_version.clone(),
+                            match_count,
+                            confidence: rule.confidence.clone(),
+                            suppressed: suppression.is_some(),
+                            suppression_id: suppression.map(|spec| spec.id.clone()),
+                        });
+                    }
+                }
             }
         }
     }
+    let incomplete_coverage = if unscanned_file_count > 0 {
+        Some(IncompleteCoverage {
+            reason: INCOMPLETE_COVERAGE_TOTAL_BYTE_BUDGET,
+            unscanned_file_count,
+            unscanned_byte_count,
+        })
+    } else {
+        None
+    };
     findings.sort_by(|a, b| {
         a.surface
             .cmp(b.surface)
@@ -675,7 +839,382 @@ fn scan_conversation_findings_with_limits(
             .then(a.redacted_path.cmp(&b.redacted_path))
             .then(a.reason.as_str().cmp(b.reason.as_str()))
     });
-    Ok(ConversationScanResult { findings, skipped })
+    rule_coverage_warnings.sort_by(|a, b| a.rule_id.cmp(&b.rule_id));
+    Ok(ConversationScanResult {
+        findings,
+        skipped,
+        incomplete_coverage,
+        rule_coverage_warnings,
+    })
+}
+
+// Result of scanning one conversation file: how many bytes were read (charged
+// to the runtime budget) and either per-rule match counts or a binary skip.
+struct FileScan {
+    bytes_scanned: u64,
+    outcome: FileScanOutcome,
+}
+
+enum FileScanOutcome {
+    // Per-rule match counts, in the same order as `rules`.
+    Scanned(Vec<u64>),
+    // Genuinely unscannable as text (contains a NUL byte / undecodable).
+    Binary,
+}
+
+// Whole-read path for files at or under the per-file cap. Reads the file once,
+// decodes lossily, and counts matches per rule exactly as before (#13).
+fn scan_file_whole(path: &Path, rules: &[CompiledSecretRule]) -> Result<FileScan> {
+    let bytes = fs::read(path)?;
+    let bytes_scanned = bytes.len() as u64;
+    if bytes.contains(&0) {
+        return Ok(FileScan {
+            bytes_scanned,
+            outcome: FileScanOutcome::Binary,
+        });
+    }
+    let content = String::from_utf8_lossy(&bytes);
+    let match_counts = rules.iter().map(|rule| rule.count(&content)).collect();
+    Ok(FileScan {
+        bytes_scanned,
+        outcome: FileScanOutcome::Scanned(match_counts),
+    })
+}
+
+fn is_utf8_char_start(byte: u8) -> bool {
+    // Continuation bytes are 0b10xxxxxx; everything else starts a char.
+    (byte & 0xC0) != 0x80
+}
+
+// Length of the longest prefix of `bytes` that ends on a complete UTF-8
+// sequence boundary. A trailing incomplete multibyte sequence (a lead byte whose
+// continuation bytes have not all arrived) is excluded so it can be held back and
+// completed by the next read. A standalone invalid byte (not the start of an
+// incomplete-but-valid lead sequence) is included so it decodes to U+FFFD here
+// rather than being held indefinitely (#13).
+fn utf8_complete_prefix_len(bytes: &[u8]) -> usize {
+    // Scan back over at most the last few bytes to find a lead byte; if the
+    // sequence it starts is incomplete, cut before it.
+    let len = bytes.len();
+    let mut index = len;
+    // Walk back over continuation bytes (max 3 for UTF-8).
+    let mut continuation = 0usize;
+    while index > 0 && !is_utf8_char_start(bytes[index - 1]) && continuation < 3 {
+        index -= 1;
+        continuation += 1;
+    }
+    if index == 0 {
+        // No lead byte found within range: nothing to hold back.
+        return len;
+    }
+    let lead = bytes[index - 1];
+    let expected = utf8_sequence_len(lead);
+    let have = len - (index - 1);
+    if expected > 1 && have < expected {
+        // Incomplete trailing sequence: hold back the lead + its continuations.
+        index - 1
+    } else {
+        // Complete sequence (or a non-lead/invalid byte that decodes alone).
+        len
+    }
+}
+
+// Expected total byte length of a UTF-8 sequence given its lead byte. Returns 1
+// for ASCII and for invalid lead bytes (they decode to a single U+FFFD).
+fn utf8_sequence_len(lead: u8) -> usize {
+    if lead < 0x80 {
+        1
+    } else if lead >= 0xF0 {
+        4
+    } else if lead >= 0xE0 {
+        3
+    } else if lead >= 0xC0 {
+        2
+    } else {
+        1
+    }
+}
+
+// Stateful scanner for `-----BEGIN ... PRIVATE KEY-----` ... `-----END ...
+// PRIVATE KEY-----` blocks across streaming windows. The whole-content regex
+// (`[\s\S]+?` between the markers) can match a span larger than the overlap
+// carry, so the "end > carry_len" dedup cannot guarantee a long PEM block that
+// straddles a chunk boundary is counted exactly once: it would be MISSED.
+// Silently dropping a private key is unacceptable (#13). This scanner instead
+// tracks only whether we are currently inside a block; it counts one match each
+// time a BEGIN marker is followed (eventually, across any number of chunks) by
+// an END marker. Memory is O(window): it holds no accumulated block bytes, only
+// the "inside" flag. To detect a marker split across the boundary, the window
+// already includes the OVERLAP carry; markers are short (well under OVERLAP), so
+// a marker straddling the boundary is wholly present in some window.
+struct PemMarkerScanner {
+    inside: bool,
+    count: u64,
+    // The last few bytes of the previously fed text, retained so a marker split
+    // across two feeds is still found. Bounded at PEM_TAIL_BYTES, so memory stays
+    // O(1) regardless of how large the PEM block (or file) is.
+    tail: String,
+}
+
+// A PEM marker is `-----BEGIN ` + `[A-Z0-9 ]*` label + `PRIVATE KEY-----`. The
+// fixed and required text is 11 + 16 = 27 bytes (BEGIN) / 9 + 16 = 25 bytes
+// (END); a generous tail covers any realistic label run so a marker straddling
+// a feed boundary is wholly visible in some feed without retaining block bytes.
+const PEM_TAIL_BYTES: usize = 128;
+
+// Maximum length of the `[A-Z0-9 ]` label run between `-----BEGIN `/`-----END `
+// and `PRIVATE KEY-----`. Real labels are short (e.g. "OPENSSH", "RSA",
+// "EC", "ENCRYPTED"), well under 30 chars. Bounding it makes the whole-read
+// regex and the streaming `find_pem_marker` AGREE: with a 64-char cap the full
+// BEGIN marker is at most 11 + 64 + 16 = 91 bytes, comfortably inside the
+// PEM_TAIL_BYTES (128) carry, so a marker is always wholly visible in one feed.
+// An unbounded label would let the whole-read regex match a marker the streaming
+// path silently misses once the label run exceeds the tail (#13).
+const PEM_LABEL_MAX_BYTES: usize = 64;
+
+impl PemMarkerScanner {
+    fn new() -> Self {
+        Self {
+            inside: false,
+            count: 0,
+            tail: String::new(),
+        }
+    }
+
+    // Feed the bytes of this window that were NOT already consumed by the
+    // previous window (i.e. the bytes past the carry prefix), so a stream byte is
+    // fed exactly once. `fresh` is the decoded window text starting at the first
+    // byte past the carry overlap. The retained tail from the prior feed is
+    // prepended so a marker straddling the feed seam is still matched; the tail
+    // bytes were never themselves counted as a transition, so prepending them
+    // cannot double-count.
+    fn feed(&mut self, fresh: &str) {
+        let combined = if self.tail.is_empty() {
+            fresh.to_string()
+        } else {
+            format!("{}{fresh}", self.tail)
+        };
+        let mut consumed = 0usize;
+        let mut rest = combined.as_str();
+        loop {
+            if self.inside {
+                match find_pem_end(rest) {
+                    Some(end_idx) => {
+                        self.inside = false;
+                        self.count += 1;
+                        consumed += end_idx;
+                        rest = &rest[end_idx..];
+                    }
+                    None => break,
+                }
+            } else {
+                match find_pem_begin(rest) {
+                    Some(begin_idx) => {
+                        self.inside = true;
+                        consumed += begin_idx;
+                        rest = &rest[begin_idx..];
+                    }
+                    None => break,
+                }
+            }
+        }
+        // Retain a bounded tail of the not-yet-consumed bytes so a marker that
+        // begins here but completes in the next feed is still found. Cut on a
+        // char boundary to keep the retained tail valid UTF-8.
+        let unconsumed = &combined[consumed..];
+        let keep = PEM_TAIL_BYTES.min(unconsumed.len());
+        let mut cut = unconsumed.len() - keep;
+        while cut < unconsumed.len() && !unconsumed.is_char_boundary(cut) {
+            cut += 1;
+        }
+        self.tail = unconsumed[cut..].to_string();
+    }
+}
+
+// Returns the byte index just past a `-----BEGIN ...PRIVATE KEY-----` marker, or
+// None. Mirrors the built-in regex marker shape: a `[A-Z0-9 ]` label run of at
+// most PEM_LABEL_MAX_BYTES between BEGIN and PRIVATE KEY. The label bound keeps
+// this streaming check in agreement with the whole-read regex (#13).
+fn find_pem_begin(text: &str) -> Option<usize> {
+    find_pem_marker(text, "-----BEGIN ")
+}
+
+fn find_pem_end(text: &str) -> Option<usize> {
+    find_pem_marker(text, "-----END ")
+}
+
+fn find_pem_marker(text: &str, prefix: &str) -> Option<usize> {
+    let suffix = "PRIVATE KEY-----";
+    let mut search_from = 0usize;
+    while let Some(rel) = text[search_from..].find(prefix) {
+        let prefix_start = search_from + rel;
+        let after_prefix = prefix_start + prefix.len();
+        // An optional `[A-Z0-9 ]*` label run sits between the prefix and the
+        // `PRIVATE KEY-----` suffix. Search for the suffix and accept it only
+        // when every byte between the prefix and the suffix is a label char.
+        let rest = &text[after_prefix..];
+        if let Some(suffix_rel) = rest.find(suffix) {
+            let label = &rest[..suffix_rel];
+            let label_ok = label.len() <= PEM_LABEL_MAX_BYTES
+                && label
+                    .bytes()
+                    .all(|byte| byte.is_ascii_uppercase() || byte.is_ascii_digit() || byte == b' ');
+            if label_ok {
+                return Some(after_prefix + suffix_rel + suffix.len());
+            }
+        }
+        // No valid suffix for this prefix; advance and keep looking.
+        search_from = after_prefix;
+    }
+    None
+}
+
+// Streaming path for oversized files. Holds at most one chunk plus a fixed
+// OVERLAP carry in memory, so peak memory is bounded regardless of file size.
+//
+// Overlap/dedup: each window is `carry || chunk`. The carry is the last
+// OVERLAP bytes of the previous window. For the first window every match is
+// counted. For later windows a match counts only when its end offset lands
+// beyond the carried overlap region (end > carry_len): matches that end inside
+// the carry were already counted in the previous window, while a match the
+// previous window truncated at the boundary completes here and is counted once.
+//
+// Coordinate space: both `carry_len` and every match-end offset are byte indices
+// into the SAME decoded window string. `carry_len` is the byte length of the
+// decoded carry prefix, not the raw carried byte count, so the comparison is
+// apples-to-apples even when the carry or chunk holds multibyte or invalid-UTF-8
+// content (invalid bytes decode to a 3-byte U+FFFD) (#13).
+//
+// The bound holds only for rules whose match span is <= MAX_MATCH_SPAN. The PEM
+// block rule is unbounded, so on this path it is detected by the stateful
+// PemMarkerScanner instead of its regex; customer rules whose span may exceed
+// the window are surfaced as ruleCoverageWarnings by the caller (#13).
+fn scan_file_streaming(
+    path: &Path,
+    rules: &[CompiledSecretRule],
+    limits: &ConversationScanLimits,
+) -> Result<FileScan> {
+    use std::io::Read;
+
+    let chunk_bytes = limits.chunk_bytes.max(1);
+    let overlap_bytes = limits.overlap_bytes;
+    let mut file = fs::File::open(path)?;
+    let mut chunk = vec![0u8; chunk_bytes];
+    // `carry` always holds COMPLETE, valid UTF-8 bytes: a multibyte char split by
+    // a read boundary is held in `pending_tail` (raw bytes) and re-attached to
+    // the front of the next chunk, so no char is ever split across the lossy
+    // decode of two windows. This keeps the decoded-window coordinate space
+    // consistent: decoding `carry` alone yields exactly the prefix of the full
+    // window, so carry_len (decoded carry length) is a valid char boundary and an
+    // apples-to-apples dedup bound for the match-end offsets (#13).
+    let mut carry: Vec<u8> = Vec::new();
+    let mut pending_tail: Vec<u8> = Vec::new();
+    let mut match_counts = vec![0u64; rules.len()];
+    let mut bytes_scanned: u64 = 0;
+    let mut first_window = true;
+    let mut pem_scanner = PemMarkerScanner::new();
+
+    loop {
+        let read = file.read(&mut chunk)?;
+        if read == 0 {
+            break;
+        }
+        bytes_scanned = bytes_scanned.saturating_add(read as u64);
+        if chunk[..read].contains(&0) {
+            // A NUL byte anywhere marks the file as binary; abandon streaming
+            // and report it as unscannable text rather than emitting findings.
+            return Ok(FileScan {
+                bytes_scanned,
+                outcome: FileScanOutcome::Binary,
+            });
+        }
+        // Prepend any incomplete multibyte char held back from the previous read
+        // so a char split across the raw read boundary is decoded as one char.
+        let mut fresh = std::mem::take(&mut pending_tail);
+        fresh.extend_from_slice(&chunk[..read]);
+        // Hold back a trailing incomplete UTF-8 sequence (a multibyte char the
+        // read cut in half) for the next iteration so it is not decoded as a
+        // lone U+FFFD here and another U+FFFD there. A genuinely invalid byte is
+        // not an incomplete sequence and stays in `fresh` to decode as U+FFFD.
+        let split = utf8_complete_prefix_len(&fresh);
+        pending_tail = fresh.split_off(split);
+
+        let raw_carry_len = carry.len();
+        let mut window = carry;
+        window.extend_from_slice(&fresh);
+        let window_text = String::from_utf8_lossy(&window);
+        // carry decodes to exactly the prefix of window_text (both are complete
+        // UTF-8 at the seam), so its decoded byte length is the dedup boundary.
+        let carry_len = String::from_utf8_lossy(&window[..raw_carry_len]).len();
+        for (rule, count) in rules.iter().zip(match_counts.iter_mut()) {
+            // The PEM block rule is handled by the stateful marker scanner
+            // below; skip its (potentially boundary-missing) regex here (#13).
+            if rule.pattern_class == PEM_PRIVATE_KEY_PATTERN_CLASS
+                && matches!(rule.matcher, SecretRuleMatcher::BuiltIn(_))
+            {
+                continue;
+            }
+            for end in rule.match_ends(&window_text) {
+                if first_window || end > carry_len {
+                    *count += 1;
+                }
+            }
+        }
+        // Feed only the fresh (post-carry) portion of the window to the PEM
+        // marker scanner so a marker in the overlap is not counted twice.
+        pem_scanner.feed(&window_text[carry_len..]);
+        // Carry the tail OVERLAP bytes into the next window. Cut on a UTF-8 char
+        // boundary so the carry stays complete valid UTF-8.
+        let keep = overlap_bytes.min(window.len());
+        let mut cut = window.len() - keep;
+        while cut < window.len() && !is_utf8_char_start(window[cut]) {
+            cut += 1;
+        }
+        carry = window.split_off(cut);
+        first_window = false;
+    }
+
+    // A truncated file can leave an incomplete trailing multibyte sequence in
+    // `pending_tail` that never completed. Decode it (lossily, as U+FFFD) in a
+    // final window so the tail is still scanned and stream output matches the
+    // whole-read path (#13).
+    if !pending_tail.is_empty() {
+        let raw_carry_len = carry.len();
+        let mut window = carry;
+        window.extend_from_slice(&pending_tail);
+        let window_text = String::from_utf8_lossy(&window);
+        let carry_len = String::from_utf8_lossy(&window[..raw_carry_len]).len();
+        for (rule, count) in rules.iter().zip(match_counts.iter_mut()) {
+            if rule.pattern_class == PEM_PRIVATE_KEY_PATTERN_CLASS
+                && matches!(rule.matcher, SecretRuleMatcher::BuiltIn(_))
+            {
+                continue;
+            }
+            for end in rule.match_ends(&window_text) {
+                if first_window || end > carry_len {
+                    *count += 1;
+                }
+            }
+        }
+        pem_scanner.feed(&window_text[carry_len..]);
+    }
+
+    // Fold the stateful PEM count into the PEM rule's slot, if that rule is
+    // active.
+    if pem_scanner.count > 0 {
+        for (rule, count) in rules.iter().zip(match_counts.iter_mut()) {
+            if rule.pattern_class == PEM_PRIVATE_KEY_PATTERN_CLASS
+                && matches!(rule.matcher, SecretRuleMatcher::BuiltIn(_))
+            {
+                *count = pem_scanner.count;
+            }
+        }
+    }
+
+    Ok(FileScan {
+        bytes_scanned,
+        outcome: FileScanOutcome::Scanned(match_counts),
+    })
 }
 
 fn conversation_file_matches(path: &Path, root: &ConversationRoot) -> bool {
@@ -824,12 +1363,25 @@ fn load_customer_rule_pack(path: Option<&Path>) -> Result<Option<CustomerRulePac
                     path.display()
                 )
             })?;
+        let streaming_span_unbounded = regex_span_may_exceed_window(&spec.regex);
+        if streaming_span_unbounded {
+            // Fixed-window streaming cannot guarantee an unbounded regex catches
+            // a match straddling a chunk boundary. Warn at load so the operator
+            // sees it even before a report is read; the report also carries an
+            // explicit ruleCoverageWarning when the rule runs on an oversized
+            // file. Never a silent drop (#13).
+            eprintln!(
+                "reeve: conversation rule {} may match a span larger than the {MAX_MATCH_SPAN}-byte streaming window; matches in oversized files that straddle a chunk boundary are not guaranteed and will be reported as a ruleCoverageWarning",
+                spec.rule_id
+            );
+        }
         rules.push(CompiledSecretRule {
             pattern_class: spec.pattern_class,
             rule_id: spec.rule_id,
             rule_pack_version: file.rule_pack_version.clone(),
             confidence: spec.confidence,
             matcher: SecretRuleMatcher::Regex(matcher),
+            streaming_span_unbounded,
         });
     }
 
@@ -844,6 +1396,36 @@ fn load_customer_rule_pack(path: Option<&Path>) -> Result<Option<CustomerRulePac
     }))
 }
 
+// Could this customer regex match a span larger than MAX_MATCH_SPAN, so that a
+// boundary-straddling match in an oversized streamed file is not guaranteed to
+// be deduped correctly?
+//
+// We answer with a PROVABLE upper bound on the match length, not a hand-rolled
+// scan of quantifier counts. `regex_syntax::parse` lowers the pattern to an HIR
+// whose `properties().maximum_len()` is the largest possible match length in
+// BYTES (`None` == provably unbounded). Crucially this folds in the repeated
+// atom / group length and concatenation, so `(ab){5000}` (10 KB),
+// `[A-Za-z]{5000}[0-9]{5000}` (10 KB), and `x{5000}y{5000}` (10 KB) all report
+// their true span rather than just a per-quantifier count.
+//
+// A rule is streaming-safe ONLY when the bound is `Some(n)` with
+// `n <= MAX_MATCH_SPAN`. Every other outcome (unbounded `None`, a bound over the
+// window, or a pattern that fails to parse here) is flagged. This is
+// safe-by-default for a secret scanner: over-flagging a rule that is actually
+// fine is acceptable, a silent under-count is not (#13).
+fn regex_span_may_exceed_window(regex: &str) -> bool {
+    match regex_syntax::parse(regex) {
+        Ok(hir) => match hir.properties().maximum_len() {
+            Some(max_len) => max_len > MAX_MATCH_SPAN,
+            None => true, // Provably unbounded (`+`, `*`, `{N,}`, ...): flag.
+        },
+        // If the AST cannot be built here we cannot prove the bound, so flag
+        // rather than risk a silent miss. (The rule is compiled separately by
+        // `regex::Regex`; a parse divergence is itself worth surfacing.)
+        Err(_) => true,
+    }
+}
+
 fn compile_secret_rules(customer_rule_pack: Option<&CustomerRulePack>) -> Vec<CompiledSecretRule> {
     let mut rules = DEFAULT_SECRET_RULES
         .iter()
@@ -853,6 +1435,10 @@ fn compile_secret_rules(customer_rule_pack: Option<&CustomerRulePack>) -> Vec<Co
             rule_pack_version: DEFAULT_RULE_PACK_VERSION.to_string(),
             confidence: rule.confidence.to_string(),
             matcher: SecretRuleMatcher::BuiltIn(rule.matcher),
+            // Built-in token rules match short spans; the PEM block rule is
+            // handled by the stateful marker scanner on the streaming path, so
+            // no built-in needs the unbounded-span warning (#13).
+            streaming_span_unbounded: false,
         })
         .collect::<Vec<_>>();
     if let Some(pack) = customer_rule_pack {
@@ -967,6 +1553,8 @@ struct SensitiveDataReportBuild<'a> {
     surfaces: &'a [SurfaceInventory],
     findings: &'a [PatternFinding],
     skipped: &'a [SkippedFile],
+    incomplete_coverage: Option<&'a IncompleteCoverage>,
+    rule_coverage_warnings: &'a [RuleCoverageWarning],
     options: &'a SensitiveDataScanOptions,
     customer_rule_pack: Option<&'a CustomerRulePack>,
 }
@@ -1024,13 +1612,36 @@ fn sensitive_data_report_value(input: SensitiveDataReportBuild<'_>) -> Result<Va
             "surfaces": input.surfaces.iter().map(surface_value).collect::<Vec<_>>()
         }
     });
-    // Surface skipped files as auditable telemetry. Omit the key entirely when
-    // nothing was skipped so normal reports keep their existing shape (#6).
+    // Surface skipped (binary/unscannable) files as auditable telemetry. Omit
+    // the key entirely when nothing was skipped so normal reports keep their
+    // existing shape (#6, #13).
     if !input.skipped.is_empty() {
         report["sensitiveDataReport"]["skipped"] = input
             .skipped
             .iter()
             .map(skipped_value)
+            .collect::<Vec<_>>()
+            .into();
+    }
+    // The total-byte runtime budget stopped the scan before every file was
+    // read: emit an explicit coverage gap so it is auditable, not silent (#13).
+    // Omitted when the scan read every file.
+    if let Some(coverage) = input.incomplete_coverage {
+        report["sensitiveDataReport"]["incompleteCoverage"] = json!({
+            "reason": coverage.reason,
+            "unscannedFileCount": coverage.unscanned_file_count,
+            "unscannedByteCount": coverage.unscanned_byte_count
+        });
+    }
+    // A customer rule whose match span may exceed the fixed streaming window ran
+    // on an oversized file: surface the coverage limitation explicitly so a
+    // possible under-match is auditable, never silent (#13). Omitted when no
+    // such rule applied.
+    if !input.rule_coverage_warnings.is_empty() {
+        report["sensitiveDataReport"]["ruleCoverageWarnings"] = input
+            .rule_coverage_warnings
+            .iter()
+            .map(rule_coverage_warning_value)
             .collect::<Vec<_>>()
             .into();
     }
@@ -1043,6 +1654,14 @@ fn skipped_value(skipped: &SkippedFile) -> Value {
         "redactedPath": &skipped.redacted_path,
         "sizeBytes": skipped.size_bytes,
         "surface": skipped.surface
+    })
+}
+
+fn rule_coverage_warning_value(warning: &RuleCoverageWarning) -> Value {
+    json!({
+        "patternClass": &warning.pattern_class,
+        "reason": warning.reason,
+        "ruleId": &warning.rule_id
     })
 }
 
@@ -1265,44 +1884,97 @@ fn candidate_tokens(content: &str) -> impl Iterator<Item = &str> {
         .filter(|token| !token.is_empty())
 }
 
+// Yields (token, end-byte-offset) for every candidate token. The end offset is
+// the byte index just past the token in `content`, used by the streaming path
+// to dedup across the overlap carry (#13). Offsets are derived from the real
+// byte positions in `content` via char_indices, so they are correct regardless
+// of delimiter byte-width: a multibyte delimiter (or a multibyte U+FFFD that the
+// lossy decode inserted for invalid input) must not be assumed to be one byte,
+// or the end offsets drift past a chunk boundary and the dedup miscounts (#13).
+fn candidate_tokens_with_ends(content: &str) -> impl Iterator<Item = (&str, usize)> {
+    let is_token_char = |ch: char| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.');
+    let mut tokens = Vec::new();
+    let mut token_start: Option<usize> = None;
+    for (index, ch) in content.char_indices() {
+        if is_token_char(ch) {
+            if token_start.is_none() {
+                token_start = Some(index);
+            }
+        } else if let Some(start) = token_start.take() {
+            tokens.push((&content[start..index], index));
+        }
+    }
+    if let Some(start) = token_start {
+        tokens.push((&content[start..], content.len()));
+    }
+    tokens.into_iter()
+}
+
+// Shared end-offset helper for token rules: an end offset per token the
+// predicate accepts. count and ends stay in lockstep this way (#13).
+fn token_match_ends(content: &str, predicate: fn(&str) -> bool) -> Vec<usize> {
+    candidate_tokens_with_ends(content)
+        .filter(|(token, _)| predicate(token))
+        .map(|(_, end)| end)
+        .collect()
+}
+
+fn is_anthropic_key(token: &str) -> bool {
+    token.starts_with("sk-ant-")
+        && token.len() >= 24
+        && has_plausible_secret_body(token, &["sk-ant-api03-", "sk-ant-"])
+}
+
 fn count_anthropic_keys(content: &str) -> u64 {
     candidate_tokens(content)
-        .filter(|token| {
-            token.starts_with("sk-ant-")
-                && token.len() >= 24
-                && has_plausible_secret_body(token, &["sk-ant-api03-", "sk-ant-"])
-        })
+        .filter(|token| is_anthropic_key(token))
         .count() as u64
+}
+
+fn anthropic_key_ends(content: &str) -> Vec<usize> {
+    token_match_ends(content, is_anthropic_key)
+}
+
+fn is_aws_access_key(token: &str) -> bool {
+    token.len() == 20
+        && token.starts_with("AKIA")
+        && token
+            .chars()
+            .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit())
+        && has_plausible_secret_body(token, &["AKIA"])
 }
 
 fn count_aws_access_keys(content: &str) -> u64 {
     candidate_tokens(content)
-        .filter(|token| {
-            token.len() == 20
-                && token.starts_with("AKIA")
-                && token
-                    .chars()
-                    .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit())
-                && has_plausible_secret_body(token, &["AKIA"])
-        })
+        .filter(|token| is_aws_access_key(token))
         .count() as u64
+}
+
+fn aws_access_key_ends(content: &str) -> Vec<usize> {
+    token_match_ends(content, is_aws_access_key)
+}
+
+fn is_jwt(token: &str) -> bool {
+    token.starts_with("eyJ")
+        && token.matches('.').count() == 2
+        && token
+            .split('.')
+            .all(|segment| segment.len() >= 10 && segment.chars().all(is_base64url_char))
 }
 
 fn count_jwts(content: &str) -> u64 {
     candidate_tokens(content)
-        .filter(|token| {
-            token.starts_with("eyJ")
-                && token.matches('.').count() == 2
-                && token
-                    .split('.')
-                    .all(|segment| segment.len() >= 10 && segment.chars().all(is_base64url_char))
-        })
+        .filter(|token| is_jwt(token))
         .count() as u64
 }
 
-fn count_oauth_client_secrets(content: &str) -> u64 {
+fn jwt_ends(content: &str) -> Vec<usize> {
+    token_match_ends(content, is_jwt)
+}
+
+fn oauth_client_secret_regex() -> &'static Regex {
     static OAUTH_CLIENT_SECRET: OnceLock<Regex> = OnceLock::new();
-    let regex = OAUTH_CLIENT_SECRET.get_or_init(|| {
+    OAUTH_CLIENT_SECRET.get_or_init(|| {
         RegexBuilder::new(
             r#"\b(?:oauth[_-]?client[_-]?secret|client[_-]?secret|oauth[_-]?secret)\b["']?\s*[:=]\s*["']?([A-Za-z0-9][A-Za-z0-9_.-]{15,})"#,
         )
@@ -1310,48 +1982,86 @@ fn count_oauth_client_secrets(content: &str) -> u64 {
         .size_limit(1_000_000)
         .build()
         .expect("built-in OAuth client-secret regex compiles")
-    });
-    regex
+    })
+}
+
+fn count_oauth_client_secrets(content: &str) -> u64 {
+    oauth_client_secret_regex()
         .captures_iter(content)
         .filter_map(|captures| captures.get(1).map(|matched| matched.as_str()))
         .filter(|token| has_plausible_secret_body(token, &[]))
         .count() as u64
 }
 
+fn oauth_client_secret_ends(content: &str) -> Vec<usize> {
+    oauth_client_secret_regex()
+        .captures_iter(content)
+        .filter_map(|captures| captures.get(1))
+        .filter(|matched| has_plausible_secret_body(matched.as_str(), &[]))
+        .map(|matched| matched.end())
+        .collect()
+}
+
+fn is_openai_key(token: &str) -> bool {
+    (token.starts_with("sk-proj-") || token.starts_with("sk-"))
+        && token.len() >= 24
+        && !token.starts_with("sk-ant-")
+        && !token.starts_with("sk_live_")
+        && !token.starts_with("sk_test_")
+        && has_plausible_secret_body(token, &["sk-proj-", "sk-"])
+}
+
 fn count_openai_keys(content: &str) -> u64 {
     candidate_tokens(content)
-        .filter(|token| {
-            (token.starts_with("sk-proj-") || token.starts_with("sk-"))
-                && token.len() >= 24
-                && !token.starts_with("sk-ant-")
-                && !token.starts_with("sk_live_")
-                && !token.starts_with("sk_test_")
-                && has_plausible_secret_body(token, &["sk-proj-", "sk-"])
-        })
+        .filter(|token| is_openai_key(token))
         .count() as u64
 }
 
-fn count_private_key_pem_blocks(content: &str) -> u64 {
+fn openai_key_ends(content: &str) -> Vec<usize> {
+    token_match_ends(content, is_openai_key)
+}
+
+fn private_key_pem_regex() -> &'static Regex {
     static PRIVATE_KEY_PEM: OnceLock<Regex> = OnceLock::new();
-    let regex = PRIVATE_KEY_PEM.get_or_init(|| {
+    PRIVATE_KEY_PEM.get_or_init(|| {
+        // The label run is bounded to PEM_LABEL_MAX_BYTES (64) so this whole-read
+        // regex and the streaming `find_pem_marker` agree: an unbounded `*` would
+        // match a long-label marker the streaming path (which only retains
+        // PEM_TAIL_BYTES) silently misses (#13).
         RegexBuilder::new(
-            r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]+?-----END [A-Z0-9 ]*PRIVATE KEY-----",
+            r"-----BEGIN [A-Z0-9 ]{0,64}PRIVATE KEY-----[\s\S]+?-----END [A-Z0-9 ]{0,64}PRIVATE KEY-----",
         )
         .size_limit(1_000_000)
         .build()
         .expect("built-in private-key PEM regex compiles")
-    });
-    regex.find_iter(content).count() as u64
+    })
+}
+
+fn count_private_key_pem_blocks(content: &str) -> u64 {
+    private_key_pem_regex().find_iter(content).count() as u64
+}
+
+fn private_key_pem_block_ends(content: &str) -> Vec<usize> {
+    private_key_pem_regex()
+        .find_iter(content)
+        .map(|matched| matched.end())
+        .collect()
+}
+
+fn is_stripe_key(token: &str) -> bool {
+    (token.starts_with("sk_live_") || token.starts_with("sk_test_"))
+        && token.len() >= 24
+        && has_plausible_secret_body(token, &["sk_live_", "sk_test_"])
 }
 
 fn count_stripe_keys(content: &str) -> u64 {
     candidate_tokens(content)
-        .filter(|token| {
-            (token.starts_with("sk_live_") || token.starts_with("sk_test_"))
-                && token.len() >= 24
-                && has_plausible_secret_body(token, &["sk_live_", "sk_test_"])
-        })
+        .filter(|token| is_stripe_key(token))
         .count() as u64
+}
+
+fn stripe_key_ends(content: &str) -> Vec<usize> {
+    token_match_ends(content, is_stripe_key)
 }
 
 fn has_plausible_secret_body(token: &str, prefixes: &[&str]) -> bool {
@@ -2556,76 +3266,195 @@ enabled = true
         "Q7mZ9pL2xT6vN4cR8sU0wY3aB5dE1fG9".to_string()
     }
 
-    #[test]
-    fn oversized_conversation_file_is_skipped_not_read() {
-        // A file larger than the per-file cap must be recorded as a skip and
-        // never read into memory, while a normal small file in the same root
-        // is still scanned (#6). Remove the size guard and this test fails:
-        // the oversized file would be read and produce a finding instead.
-        let root = tempdir().unwrap();
-        let aws_key = fixture_aws_access_key();
-
-        // Sparse file just over a tiny per-file cap. set_len does not allocate
-        // real bytes, so the test stays fast and uses almost no disk. If the
-        // guard were removed, reading this would try to allocate the whole len.
-        let big_relative = ".claude/projects/HugeProject/transcript.jsonl";
-        let big_path = root.path().join(big_relative);
-        fs::create_dir_all(big_path.parent().unwrap()).unwrap();
-        let big_file = fs::File::create(&big_path).unwrap();
-        let cap: u64 = 1024;
-        big_file.set_len(cap + 1).unwrap();
-        drop(big_file);
-
-        // Normal small file carrying a real secret must still be scanned.
-        write_fixture(
-            root.path(),
-            ".claude/projects/SmallProject/session.jsonl",
-            &aws_key,
-        );
-
-        let rules = compile_secret_rules(None);
-        let limits = ConversationScanLimits {
-            max_file_bytes: cap,
+    fn streaming_limits(max_file_bytes: u64, chunk_bytes: usize) -> ConversationScanLimits {
+        ConversationScanLimits {
+            max_file_bytes,
             max_total_bytes: MAX_CONVERSATION_TOTAL_BYTES,
-        };
-        let result =
-            scan_conversation_findings_with_limits(root.path(), &rules, &[], limits).unwrap();
-
-        // Scan completed with no error. The small file produced a finding.
-        assert!(
-            result
-                .findings
-                .iter()
-                .any(|finding| finding.pattern_class == "aws-access-key"),
-            "small file should still be scanned and yield a finding"
-        );
-        // The oversized file is not among the scanned findings.
-        assert!(
-            result
-                .findings
-                .iter()
-                .all(|finding| !finding.redacted_path.contains("transcript")),
-            "oversized file must not appear as a scanned finding"
-        );
-        // The oversized file is reported as a skip with the right reason and size.
-        assert_eq!(
-            result.skipped.len(),
-            1,
-            "exactly one file should be skipped"
-        );
-        let skip = &result.skipped[0];
-        assert_eq!(skip.reason, SkipReason::FileTooLarge);
-        assert_eq!(skip.size_bytes, cap + 1);
-        assert_eq!(skip.surface, "claude-code");
-        // Redaction holds for the skip record too: no project name leaks.
-        assert!(!skip.redacted_path.contains("HugeProject"));
+            chunk_bytes,
+            overlap_bytes: 64,
+        }
     }
 
     #[test]
-    fn total_byte_budget_truncates_conversation_scan() {
-        // A flood of in-range files must not exhaust memory: once the
-        // cumulative read budget is exhausted, remaining files are skipped
-        // with a budget reason rather than read (#6).
+    fn oversized_conversation_file_is_streamed_and_secret_detected() {
+        // A file larger than the per-file cap must be streamed in bounded
+        // chunks and its secret detected, not skipped (#13). The whole file is
+        // never loaded: chunk_bytes is far smaller than the file.
+        let root = tempdir().unwrap();
+        let aws_key = fixture_aws_access_key();
+        // Pad the secret deep into the file so it lands well past the first
+        // chunk, forcing multiple streaming windows.
+        let filler = "x".repeat(4096);
+        let content = format!("{filler}\naws={aws_key}\n{filler}");
+        write_fixture(
+            root.path(),
+            ".claude/projects/HugeProject/transcript.jsonl",
+            &content,
+        );
+
+        let rules = compile_secret_rules(None);
+        // Tiny per-file cap forces the streaming path; 256-byte chunks force
+        // many windows over a multi-kilobyte file.
+        let limits = streaming_limits(64, 256);
+        let result =
+            scan_conversation_findings_with_limits(root.path(), &rules, &[], limits).unwrap();
+
+        let aws_findings: Vec<_> = result
+            .findings
+            .iter()
+            .filter(|finding| finding.pattern_class == "aws-access-key")
+            .collect();
+        assert_eq!(
+            aws_findings.len(),
+            1,
+            "streamed oversized file should yield exactly one aws finding: {:?}",
+            result.findings
+        );
+        assert_eq!(aws_findings[0].match_count, 1);
+        assert!(
+            result.skipped.is_empty(),
+            "oversized text file must be streamed, not skipped"
+        );
+        assert!(result.incomplete_coverage.is_none());
+    }
+
+    #[test]
+    fn secret_straddling_chunk_boundary_is_detected() {
+        // A secret split across a chunk boundary must still be matched thanks
+        // to the overlap carry (#13). Place the 20-byte AWS key so it spans the
+        // chunk edge: filler sized so the key starts a few bytes before the
+        // boundary and ends a few bytes after it.
+        let root = tempdir().unwrap();
+        let aws_key = fixture_aws_access_key();
+        let chunk = 64usize;
+        // Key starts 10 bytes before the first chunk boundary so 10 of its 20
+        // bytes land in chunk 0 and the rest in chunk 1. A space before the key
+        // makes it a standalone candidate token (the filler is alphanumeric).
+        let prefix_len = chunk - 10;
+        let content = format!("{} {aws_key} tail", "y".repeat(prefix_len - 1));
+        write_fixture(
+            root.path(),
+            ".claude/projects/StraddleProject/transcript.jsonl",
+            &content,
+        );
+
+        let rules = compile_secret_rules(None);
+        let limits = streaming_limits(16, chunk);
+        let result =
+            scan_conversation_findings_with_limits(root.path(), &rules, &[], limits).unwrap();
+
+        let aws_findings: Vec<_> = result
+            .findings
+            .iter()
+            .filter(|finding| finding.pattern_class == "aws-access-key")
+            .collect();
+        assert_eq!(
+            aws_findings.len(),
+            1,
+            "boundary-straddling secret should be detected exactly once: {:?}",
+            result.findings
+        );
+        assert_eq!(aws_findings[0].match_count, 1);
+    }
+
+    #[test]
+    fn stream_count_equals_whole_read_count_without_double_counting() {
+        // Streaming a mid-size file with several secrets, some near chunk
+        // boundaries, must produce the same per-rule counts as a single
+        // whole-file scan: no match dropped, none double-counted (#13).
+        let root = tempdir().unwrap();
+        let key_a = fixture_aws_access_key();
+        let key_b = "AKIA7Q4M2Z9X8C5N1P4S".to_string();
+        let key_c = "AKIA3D5F7H9K2M4P6R8T".to_string();
+        // Vary spacing so keys fall at different positions relative to the
+        // chunk grid.
+        let content = format!(
+            "{pad1}aws={key_a}\n{pad2}second={key_b}\n{pad3}third={key_c}\n",
+            pad1 = "a".repeat(50),
+            pad2 = "b".repeat(70),
+            pad3 = "c".repeat(33),
+        );
+        let relative = ".claude/projects/MidSize/transcript.jsonl";
+        write_fixture(root.path(), relative, &content);
+        let rules = compile_secret_rules(None);
+
+        // Whole-read path: cap above file size.
+        let whole = scan_conversation_findings_with_limits(
+            root.path(),
+            &rules,
+            &[],
+            ConversationScanLimits {
+                max_file_bytes: content.len() as u64 + 1,
+                max_total_bytes: MAX_CONVERSATION_TOTAL_BYTES,
+                chunk_bytes: CONVERSATION_SCAN_CHUNK_BYTES,
+                overlap_bytes: CONVERSATION_SCAN_OVERLAP_BYTES,
+            },
+        )
+        .unwrap();
+
+        // Streaming path: tiny cap and chunk so the same file streams.
+        let streamed = scan_conversation_findings_with_limits(
+            root.path(),
+            &rules,
+            &[],
+            streaming_limits(16, 48),
+        )
+        .unwrap();
+
+        let whole_aws = whole
+            .findings
+            .iter()
+            .find(|finding| finding.pattern_class == "aws-access-key")
+            .map(|finding| finding.match_count);
+        let streamed_aws = streamed
+            .findings
+            .iter()
+            .find(|finding| finding.pattern_class == "aws-access-key")
+            .map(|finding| finding.match_count);
+        assert_eq!(whole_aws, Some(3), "whole-read should see all three keys");
+        assert_eq!(
+            streamed_aws, whole_aws,
+            "stream count must equal whole-read count with no double counting"
+        );
+    }
+
+    #[test]
+    fn binary_conversation_file_is_skipped_not_streamed() {
+        // A file containing NUL bytes is genuinely unscannable as text: record
+        // it via skip telemetry rather than streaming it as text (#13).
+        let root = tempdir().unwrap();
+        let binary = {
+            let mut bytes = b"AKIA7Q4M2Z9X8C5N1P3R".to_vec();
+            bytes.push(0); // NUL marks the content binary
+            bytes.extend_from_slice(b"more");
+            bytes
+        };
+        let relative = ".claude/projects/BinaryProject/blob.jsonl";
+        let path = root.path().join(relative);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, &binary).unwrap();
+
+        let rules = compile_secret_rules(None);
+        // Small cap so the file streams; the NUL is still caught either way.
+        let limits = streaming_limits(4, 8);
+        let result =
+            scan_conversation_findings_with_limits(root.path(), &rules, &[], limits).unwrap();
+
+        assert!(
+            result.findings.is_empty(),
+            "binary content must not produce text findings"
+        );
+        assert_eq!(result.skipped.len(), 1, "binary file should be skipped");
+        assert_eq!(result.skipped[0].reason, SkipReason::BinarySkipped);
+        assert_eq!(result.skipped[0].reason.as_str(), "binary");
+        assert!(!result.skipped[0].redacted_path.contains("BinaryProject"));
+    }
+
+    #[test]
+    fn total_byte_budget_emits_explicit_incomplete_coverage_summary() {
+        // Once the total-byte runtime budget is exhausted, remaining files go
+        // unscanned and the scan records an EXPLICIT incomplete-coverage
+        // summary (file/byte counts + reason), not a silent stop (#13).
         let root = tempdir().unwrap();
         for index in 0..4 {
             write_fixture(
@@ -2635,23 +3464,459 @@ enabled = true
             );
         }
         let rules = compile_secret_rules(None);
-        // Budget allows two files of 10 bytes, the rest must be skipped.
         let limits = ConversationScanLimits {
             max_file_bytes: MAX_CONVERSATION_FILE_BYTES,
             max_total_bytes: 20,
+            chunk_bytes: CONVERSATION_SCAN_CHUNK_BYTES,
+            overlap_bytes: CONVERSATION_SCAN_OVERLAP_BYTES,
         };
         let result =
             scan_conversation_findings_with_limits(root.path(), &rules, &[], limits).unwrap();
-        assert_eq!(
-            result.skipped.len(),
-            2,
-            "two of four files should be skipped once the budget is exhausted"
+
+        // Two files fit the 20-byte budget; the other two are unscanned and
+        // reported via the summary, not as per-file skips.
+        assert!(
+            result.skipped.is_empty(),
+            "budget truncation is reported via the summary, not skip telemetry"
+        );
+        let coverage = result
+            .incomplete_coverage
+            .expect("budget truncation must emit an incomplete-coverage summary");
+        assert_eq!(coverage.reason, "total-byte-budget-exceeded");
+        assert_eq!(coverage.unscanned_file_count, 2);
+        assert_eq!(coverage.unscanned_byte_count, 20);
+    }
+
+    #[test]
+    fn incomplete_coverage_summary_serializes_into_report() {
+        // The summary must appear in the serialized report JSON so operators
+        // see the coverage gap (#13).
+        let root = tempdir().unwrap();
+        let out = tempdir().unwrap();
+        for index in 0..3 {
+            write_fixture(
+                root.path(),
+                &format!(".claude/projects/Flood{index}/session.jsonl"),
+                &fixture_aws_access_key(),
+            );
+        }
+        let rules = compile_secret_rules(None);
+        let surfaces = inventory_conversation_metadata(root.path()).unwrap();
+        let scan = scan_conversation_findings_with_limits(
+            root.path(),
+            &rules,
+            &[],
+            ConversationScanLimits {
+                max_file_bytes: MAX_CONVERSATION_FILE_BYTES,
+                max_total_bytes: 20,
+                chunk_bytes: CONVERSATION_SCAN_CHUNK_BYTES,
+                overlap_bytes: CONVERSATION_SCAN_OVERLAP_BYTES,
+            },
+        )
+        .unwrap();
+        let target = Target::filesystem(root.path().to_path_buf());
+        let report = sensitive_data_report_value(SensitiveDataReportBuild {
+            report_id: "sdr-test",
+            scan_id: "scan-test",
+            timestamp: "2026-06-18T10:00:00Z",
+            target: &target,
+            surfaces: &surfaces,
+            findings: &scan.findings,
+            skipped: &scan.skipped,
+            incomplete_coverage: scan.incomplete_coverage.as_ref(),
+            rule_coverage_warnings: &scan.rule_coverage_warnings,
+            options: &SensitiveDataScanOptions {
+                scan_conversation_secrets: true,
+                suppressions_file: None,
+                conversation_rules_file: None,
+            },
+            customer_rule_pack: None,
+        })
+        .unwrap();
+        let _ = out;
+        let coverage = &report["sensitiveDataReport"]["incompleteCoverage"];
+        assert_eq!(coverage["reason"], "total-byte-budget-exceeded");
+        assert!(coverage["unscannedFileCount"].as_u64().unwrap() >= 1);
+        assert!(coverage["unscannedByteCount"].as_u64().unwrap() >= 1);
+    }
+
+    #[test]
+    fn long_pem_block_straddling_chunk_boundary_is_detected_once_when_streamed() {
+        // A PEM private-key block LARGER than the overlap carry, straddling a
+        // chunk boundary in an oversized streamed file, must be detected exactly
+        // once. The unbounded `[\s\S]+?` regex would miss it across the
+        // boundary; the stateful PemMarkerScanner catches it (#13). Fails before
+        // the marker-scanner fix.
+        let root = tempdir().unwrap();
+        let chunk = 64usize;
+        let overlap = 64usize;
+        // Body far larger than chunk and overlap so BEGIN lands in an early
+        // window and END lands many windows later, with the block spanning
+        // multiple chunk boundaries.
+        let body = "QWxpY2Vib2R5bXVzdG5ldmVyYXBwZWFy0123456789ABCDEF".repeat(40);
+        let pem = format!(
+            "-----BEGIN OPENSSH PRIVATE KEY-----\n{body}\n-----END OPENSSH PRIVATE KEY-----"
         );
         assert!(
-            result
-                .skipped
-                .iter()
-                .all(|skip| skip.reason == SkipReason::TotalBudgetExceeded)
+            pem.len() > overlap,
+            "fixture PEM must exceed the overlap carry to exercise the gap"
         );
+        // Filler before and after so the block straddles interior boundaries.
+        let filler = "x".repeat(100);
+        let content = format!("{filler}\n{pem}\n{filler}");
+        write_fixture(
+            root.path(),
+            ".claude/projects/LongPemProject/transcript.jsonl",
+            &content,
+        );
+
+        let rules = compile_secret_rules(None);
+        let limits = ConversationScanLimits {
+            max_file_bytes: 16,
+            max_total_bytes: MAX_CONVERSATION_TOTAL_BYTES,
+            chunk_bytes: chunk,
+            overlap_bytes: overlap,
+        };
+        let result =
+            scan_conversation_findings_with_limits(root.path(), &rules, &[], limits).unwrap();
+
+        let pem_findings: Vec<_> = result
+            .findings
+            .iter()
+            .filter(|finding| finding.pattern_class == "private-key-pem")
+            .collect();
+        assert_eq!(
+            pem_findings.len(),
+            1,
+            "a long PEM block straddling chunk boundaries must be detected exactly once: {:?}",
+            result.findings
+        );
+        assert_eq!(pem_findings[0].match_count, 1);
+        assert!(
+            result.skipped.is_empty(),
+            "oversized text file with a PEM block must be streamed, not skipped"
+        );
+    }
+
+    #[test]
+    fn customer_rule_with_span_exceeding_window_emits_coverage_warning_when_streamed() {
+        // A customer rule whose match span can exceed MAX_MATCH_SPAN, run on an
+        // oversized (streamed) file, must produce an explicit ruleCoverageWarning
+        // rather than a silent under-match (#13). Fails before the span-policy
+        // telemetry is added.
+        let root = tempdir().unwrap();
+        let out = tempdir().unwrap();
+        let rules_dir = tempdir().unwrap();
+        let filler = "z".repeat(4096);
+        write_fixture(
+            root.path(),
+            ".claude/projects/WideRuleProject/transcript.jsonl",
+            &format!("{filler}\nbody text\n{filler}"),
+        );
+        // {10000} upper bound far exceeds the 8 KiB MAX_MATCH_SPAN.
+        let (rules_path, _, _) = write_customer_rule_pack(
+            rules_dir.path(),
+            "wide-rule.json",
+            "acme.wide-span",
+            "acme-wide-span",
+            "secret-[A-Za-z0-9]{10000}",
+        );
+
+        let customer_pack = load_customer_rule_pack(Some(&rules_path)).unwrap();
+        let rules = compile_secret_rules(customer_pack.as_ref());
+        let limits = streaming_limits(64, 256);
+        let result =
+            scan_conversation_findings_with_limits(root.path(), &rules, &[], limits).unwrap();
+
+        assert_eq!(
+            result.rule_coverage_warnings.len(),
+            1,
+            "an unbounded-span customer rule on a streamed file must warn: {:?}",
+            result.rule_coverage_warnings
+        );
+        assert_eq!(result.rule_coverage_warnings[0].rule_id, "acme.wide-span");
+        assert_eq!(
+            result.rule_coverage_warnings[0].reason,
+            RULE_COVERAGE_WARNING_SPAN_EXCEEDS_WINDOW
+        );
+
+        // The warning must also serialize into the report.
+        let surfaces = inventory_conversation_metadata(root.path()).unwrap();
+        let target = Target::filesystem(root.path().to_path_buf());
+        let report = sensitive_data_report_value(SensitiveDataReportBuild {
+            report_id: "sdr-test",
+            scan_id: "scan-test",
+            timestamp: "2026-06-18T10:00:00Z",
+            target: &target,
+            surfaces: &surfaces,
+            findings: &result.findings,
+            skipped: &result.skipped,
+            incomplete_coverage: result.incomplete_coverage.as_ref(),
+            rule_coverage_warnings: &result.rule_coverage_warnings,
+            options: &SensitiveDataScanOptions {
+                scan_conversation_secrets: true,
+                suppressions_file: None,
+                conversation_rules_file: Some(rules_path),
+            },
+            customer_rule_pack: customer_pack.as_ref(),
+        })
+        .unwrap();
+        let _ = out;
+        let warnings = report["sensitiveDataReport"]["ruleCoverageWarnings"]
+            .as_array()
+            .unwrap();
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(warnings[0]["ruleId"], "acme.wide-span");
+        assert_eq!(
+            warnings[0]["reason"],
+            RULE_COVERAGE_WARNING_SPAN_EXCEEDS_WINDOW
+        );
+    }
+
+    #[test]
+    fn group_and_concat_quantifier_rules_are_flagged_when_streamed() {
+        // Repetitions whose true span exceeds MAX_MATCH_SPAN only when the atom /
+        // group length or concatenation is folded in. The old per-quantifier
+        // count check inspected each `{N}` in isolation and let these through,
+        // silently under-counting on the streaming path. The AST `maximum_len()`
+        // bound folds in the repeated content and catches them (#13).
+        // Each tuple: (rule_id suffix, pattern, span in bytes).
+        let cases: &[(&str, &str, usize)] = &[
+            ("group-ab", "(ab){5000}", 10_000),
+            ("group-abcd", "(abcd){3000}", 12_000),
+            ("noncap", "(?:0123456789){2000}", 20_000),
+            ("concat-class", "[A-Za-z]{5000}[0-9]{5000}", 10_000),
+            ("concat-lit", "x{5000}y{5000}", 10_000),
+        ];
+        for (suffix, pattern, span) in cases {
+            assert!(
+                *span > MAX_MATCH_SPAN,
+                "test case {suffix} must exceed the streaming window to be meaningful"
+            );
+            let root = tempdir().unwrap();
+            let rules_dir = tempdir().unwrap();
+            let filler = "z".repeat(4096);
+            write_fixture(
+                root.path(),
+                ".claude/projects/GroupRuleProject/transcript.jsonl",
+                &format!("{filler}\nbody text\n{filler}"),
+            );
+            let rule_id = format!("acme.{suffix}");
+            let (rules_path, _, _) = write_customer_rule_pack(
+                rules_dir.path(),
+                "group-rule.json",
+                &rule_id,
+                "acme-group-span",
+                pattern,
+            );
+            let customer_pack = load_customer_rule_pack(Some(&rules_path)).unwrap();
+            let rules = compile_secret_rules(customer_pack.as_ref());
+            let limits = streaming_limits(64, 256);
+            let result =
+                scan_conversation_findings_with_limits(root.path(), &rules, &[], limits).unwrap();
+
+            assert_eq!(
+                result.rule_coverage_warnings.len(),
+                1,
+                "rule {rule_id} ({pattern}) spans {span} B > {MAX_MATCH_SPAN} B and must warn: {:?}",
+                result.rule_coverage_warnings
+            );
+            assert_eq!(result.rule_coverage_warnings[0].rule_id, rule_id);
+            assert_eq!(
+                result.rule_coverage_warnings[0].reason,
+                RULE_COVERAGE_WARNING_SPAN_EXCEEDS_WINDOW
+            );
+        }
+    }
+
+    #[test]
+    fn short_bounded_customer_rule_is_not_flagged_when_streamed() {
+        // A bounded rule whose provable max span is well under MAX_MATCH_SPAN must
+        // NOT produce a ruleCoverageWarning: over-flagging is acceptable, but this
+        // rule is genuinely streaming-safe (#13).
+        let root = tempdir().unwrap();
+        let rules_dir = tempdir().unwrap();
+        let filler = "z".repeat(4096);
+        write_fixture(
+            root.path(),
+            ".claude/projects/ShortRuleProject/transcript.jsonl",
+            &format!("{filler}\nbody text\n{filler}"),
+        );
+        let (rules_path, _, _) = write_customer_rule_pack(
+            rules_dir.path(),
+            "short-rule.json",
+            "acme.short-span",
+            "acme-short-span",
+            "secret-[A-Za-z0-9]{20}",
+        );
+        let customer_pack = load_customer_rule_pack(Some(&rules_path)).unwrap();
+        let rules = compile_secret_rules(customer_pack.as_ref());
+        let limits = streaming_limits(64, 256);
+        let result =
+            scan_conversation_findings_with_limits(root.path(), &rules, &[], limits).unwrap();
+
+        assert!(
+            result.rule_coverage_warnings.is_empty(),
+            "a short bounded rule must not warn: {:?}",
+            result.rule_coverage_warnings
+        );
+    }
+
+    #[test]
+    fn span_bound_classifies_quantifiers_correctly() {
+        // Direct unit coverage of the AST `maximum_len()` bound used to flag
+        // customer rules. Group/concat spans over the window are flagged; bounded
+        // short spans are not; truly unbounded quantifiers are flagged (#13).
+        // Over the window -> flagged.
+        for over in [
+            "(ab){5000}",
+            "(abcd){3000}",
+            "(?:0123456789){2000}",
+            "[A-Za-z]{5000}[0-9]{5000}",
+            "x{5000}y{5000}",
+            "secret-[A-Za-z0-9]{10000}",
+        ] {
+            assert!(
+                regex_span_may_exceed_window(over),
+                "{over} spans more than {MAX_MATCH_SPAN} bytes and must be flagged"
+            );
+        }
+        // Provably unbounded -> flagged.
+        for unbounded in ["a+", "b*", "c{5000,}", "(ab)+"] {
+            assert!(
+                regex_span_may_exceed_window(unbounded),
+                "{unbounded} is unbounded and must be flagged"
+            );
+        }
+        // Bounded and within the window -> not flagged.
+        for safe in [
+            "secret-[A-Za-z0-9]{20}",
+            "(ab){10}",
+            "[0-9]{8}",
+            "AKIA[A-Z0-9]{16}",
+        ] {
+            assert!(
+                !regex_span_may_exceed_window(safe),
+                "{safe} is bounded within {MAX_MATCH_SPAN} bytes and must not be flagged"
+            );
+        }
+    }
+
+    #[test]
+    fn builtin_token_rules_and_pem_are_not_span_flagged() {
+        // Built-in token rules are matched by exact functions (not the customer
+        // span heuristic) and the PEM block is handled by the stateful
+        // PemMarkerScanner, so no built-in carries the unbounded-span flag and
+        // none is double-flagged (#13).
+        let rules = compile_secret_rules(None);
+        assert!(
+            rules.iter().all(|rule| !rule.streaming_span_unbounded),
+            "no built-in rule may carry the unbounded-span flag"
+        );
+        assert!(
+            rules
+                .iter()
+                .any(|rule| rule.pattern_class == PEM_PRIVATE_KEY_PATTERN_CLASS),
+            "the built-in PEM rule must still be present and unflagged"
+        );
+    }
+
+    #[test]
+    fn pem_label_bound_agrees_between_whole_read_and_streaming() {
+        // A PEM marker whose label run exceeds PEM_LABEL_MAX_BYTES must be matched
+        // by neither the whole-read regex nor the streaming marker scan, so the
+        // two paths agree (#13). A normal-length label is matched by both.
+        let long_label = "A".repeat(PEM_LABEL_MAX_BYTES + 10);
+        let over = format!("-----BEGIN {long_label} PRIVATE KEY-----");
+        assert!(
+            find_pem_begin(&over).is_none(),
+            "an over-length label must not be accepted by the streaming marker scan"
+        );
+        let over_block = format!("{over}\nbody\n-----END {long_label} PRIVATE KEY-----");
+        assert_eq!(
+            count_private_key_pem_blocks(&over_block),
+            0,
+            "an over-length label must not be matched by the whole-read regex"
+        );
+
+        // A realistic label must still match both paths.
+        let ok = "-----BEGIN OPENSSH PRIVATE KEY-----";
+        assert!(
+            find_pem_begin(ok).is_some(),
+            "a normal label must be accepted by the streaming marker scan"
+        );
+        let ok_block =
+            "-----BEGIN OPENSSH PRIVATE KEY-----\nbody\n-----END OPENSSH PRIVATE KEY-----";
+        assert_eq!(
+            count_private_key_pem_blocks(ok_block),
+            1,
+            "a normal-label PEM block must be matched by the whole-read regex"
+        );
+    }
+
+    #[test]
+    fn multibyte_delimiter_near_boundary_does_not_drift_stream_count() {
+        // Multibyte and invalid-UTF-8 bytes near a chunk boundary must not drift
+        // the dedup count: stream count must equal whole-read count (#13). Fails
+        // before the byte-offset-consistent dedup + char_indices token offsets.
+        let root = tempdir().unwrap();
+        let key_a = fixture_aws_access_key();
+        let key_b = "AKIA7Q4M2Z9X8C5N1P4S".to_string();
+        // Multibyte delimiters (emoji, accented text) and an invalid UTF-8 byte
+        // sit right around where the chunk grid will fall, so the lossy decode
+        // inserts multibyte chars and U+FFFD near the carry boundary.
+        let mut bytes: Vec<u8> = Vec::new();
+        bytes.extend_from_slice("café★".repeat(8).as_bytes());
+        bytes.extend_from_slice(format!(" first={key_a} ").as_bytes());
+        bytes.push(0xFF); // lone invalid byte -> U+FFFD on lossy decode
+        bytes.extend_from_slice("naïve🚀delim".repeat(6).as_bytes());
+        bytes.extend_from_slice(format!(" second={key_b} ").as_bytes());
+        bytes.extend_from_slice("résumé".repeat(4).as_bytes());
+        let relative = ".claude/projects/Multibyte/transcript.jsonl";
+        let path = root.path().join(relative);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, &bytes).unwrap();
+
+        let rules = compile_secret_rules(None);
+        let whole = scan_conversation_findings_with_limits(
+            root.path(),
+            &rules,
+            &[],
+            ConversationScanLimits {
+                max_file_bytes: bytes.len() as u64 + 1,
+                max_total_bytes: MAX_CONVERSATION_TOTAL_BYTES,
+                chunk_bytes: CONVERSATION_SCAN_CHUNK_BYTES,
+                overlap_bytes: CONVERSATION_SCAN_OVERLAP_BYTES,
+            },
+        )
+        .unwrap();
+
+        let whole_aws = whole
+            .findings
+            .iter()
+            .find(|finding| finding.pattern_class == "aws-access-key")
+            .map(|finding| finding.match_count);
+        assert_eq!(whole_aws, Some(2), "whole-read should see both keys");
+
+        // Stream with several small chunk sizes so a chunk boundary falls inside
+        // the multibyte/invalid runs and right next to each key.
+        for chunk in [16usize, 17, 19, 23, 31, 48] {
+            let streamed = scan_conversation_findings_with_limits(
+                root.path(),
+                &rules,
+                &[],
+                streaming_limits(8, chunk),
+            )
+            .unwrap();
+            let streamed_aws = streamed
+                .findings
+                .iter()
+                .find(|finding| finding.pattern_class == "aws-access-key")
+                .map(|finding| finding.match_count);
+            assert_eq!(
+                streamed_aws, whole_aws,
+                "stream count drifted with multibyte/invalid content at chunk size {chunk}"
+            );
+        }
     }
 }
