@@ -94,6 +94,9 @@ python3 scripts/check-tools-oss-readiness.py || fail "tools OSS readiness"
 step "docs-only paths-ignore helper self-test"
 python3 scripts/pr-docs-only.py --self-test || fail "pr-docs-only self-test (helper / ci.yml paths-ignore drift)"
 
+step "release-sensitive-paths helper self-test"
+python3 scripts/release-sensitive-paths.py --self-test || fail "release-sensitive-paths self-test (signing/release surface drift)"
+
 step "release sensitive-data flags contract"
 artifacts_dir="$(mktemp -d)"
 stage_dir="$(mktemp -d)"
