@@ -136,7 +136,7 @@ fleet use.
 **Linux / macOS:**
 
 ```bash
-TAG=v0.3.10
+TAG=v0.3.11
 ASSET=aibom-cli-x86_64-unknown-linux-gnu.tar.xz
 BASE="https://github.com/Reeve-Security/reeve/releases/download/${TAG}"
 
@@ -153,7 +153,7 @@ cosign verify-blob \
 **Windows:**
 
 ```powershell
-$TAG = "v0.3.10"
+$TAG = "v0.3.11"
 $ASSET = "aibom-cli-x86_64-pc-windows-msvc.zip"
 $BASE = "https://github.com/Reeve-Security/reeve/releases/download/$TAG"
 Invoke-WebRequest -Uri "$BASE/$ASSET" -OutFile $ASSET
