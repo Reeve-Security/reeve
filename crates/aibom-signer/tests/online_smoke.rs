@@ -23,6 +23,7 @@ fn online_sigstore_smoke() {
         aibom_bytes: br#"{"aibom":{"schemaVersion":"0.1.0"}}"#,
     };
     OnlineSigstoreSigner::from_env()
+        .expect("resolve cosign binary")
         .sign_pair_to_bundle(&pair, &bundle_path)
         .expect("cosign attest-blob produced no bundle");
     assert!(bundle_path.is_file(), "bundle file was not written");

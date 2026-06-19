@@ -1191,7 +1191,8 @@ fn verify_real_surface_config_bundle(
             "signed surface config requires --signer-identity-regexp or REEVE_SURFACE_CONFIG_SIGNER_IDENTITY_REGEXP"
         );
     };
-    let status = std::process::Command::new(cosign_binary())
+    let cosign = cosign_binary().context("resolve cosign for surface config verification")?;
+    let status = std::process::Command::new(&cosign)
         .args([
             "verify-blob",
             "--bundle",
@@ -1209,7 +1210,7 @@ fn verify_real_surface_config_bundle(
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
-        .with_context(|| format!("spawn {}", cosign_binary().display()))?;
+        .with_context(|| format!("spawn {}", cosign.display()))?;
     if !status.success() {
         bail!(
             "cosign verify-blob failed for surface config {}",
@@ -1348,7 +1349,7 @@ fn write_sensitive_report_bundle(
         report_bytes,
     });
     if sign {
-        OnlineSigstoreSigner::from_env().sign_statement_to_bundle(
+        OnlineSigstoreSigner::from_env()?.sign_statement_to_bundle(
             &statement,
             report_bytes,
             bundle_path,
@@ -1547,7 +1548,7 @@ fn write_bundle(
         aibom_bytes,
     };
     if sign {
-        OnlineSigstoreSigner::from_env().sign_pair_to_bundle(&pair, bundle_path)?;
+        OnlineSigstoreSigner::from_env()?.sign_pair_to_bundle(&pair, bundle_path)?;
     } else {
         write_fixture_bundle(bundle_path, &pair)?;
     }
@@ -1582,14 +1583,17 @@ fn resolve_sign_requested(mode: SignMode) -> Result<bool> {
     match mode {
         SignMode::Real => {
             if !cosign_available() {
+                let detail = match cosign_binary() {
+                    Ok(binary) => format!("tried '{}'", binary.display()),
+                    Err(err) => err.to_string(),
+                };
                 bail!(
-                    "--sign-mode real requires 'cosign' in PATH (tried '{}'). \
+                    "--sign-mode real requires a working 'cosign' ({detail}). \
                      Install cosign ('brew install cosign' on macOS, apt/yum on Linux, \
                      or https://docs.sigstore.dev/cosign/installation) \
-                     or set REEVE_COSIGN_BIN to a working binary. \
+                     or set REEVE_COSIGN_BIN to an absolute path to a working binary. \
                      To emit a deterministic fixture Sigstore bundle for tests or demos instead, \
-                     pass --sign-mode fixture or --skip-sign.",
-                    cosign_binary().display()
+                     pass --sign-mode fixture or --skip-sign."
                 );
             }
             Ok(true)
@@ -1688,14 +1692,17 @@ fn confirm_introspection_execution() -> Result<()> {
     Ok(())
 }
 
-fn cosign_binary() -> PathBuf {
-    std::env::var_os("REEVE_COSIGN_BIN")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("cosign"))
+/// Resolve cosign to a single absolute path, hardened against PATH-hijack.
+/// See `aibom_signer::resolve_cosign_binary`.
+fn cosign_binary() -> Result<PathBuf> {
+    aibom_signer::resolve_cosign_binary(std::env::var_os("REEVE_COSIGN_BIN"))
 }
 
 fn cosign_available() -> bool {
-    std::process::Command::new(cosign_binary())
+    let Ok(binary) = cosign_binary() else {
+        return false;
+    };
+    std::process::Command::new(binary)
         .arg("version")
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
@@ -1802,7 +1809,7 @@ fn fleet_manifest(
         .unwrap_or("fleet-manifest.json");
     let statement = build_fleet_manifest_statement(subject_name, &manifest_bytes);
     if sign_real {
-        OnlineSigstoreSigner::from_env().sign_statement_to_bundle(
+        OnlineSigstoreSigner::from_env()?.sign_statement_to_bundle(
             &statement,
             &manifest_bytes,
             &bundle_path,
@@ -1981,7 +1988,7 @@ fn mcp_registry_seed(
         .unwrap_or("mcp-registry-seed.json");
     let statement = build_mcp_registry_seed_statement(subject_name, &seed_bytes, &source_url);
     if sign_real {
-        OnlineSigstoreSigner::from_env().sign_statement_to_bundle(
+        OnlineSigstoreSigner::from_env()?.sign_statement_to_bundle(
             &statement,
             &seed_bytes,
             &bundle_path,

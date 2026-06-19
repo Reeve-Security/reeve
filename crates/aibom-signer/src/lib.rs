@@ -21,7 +21,7 @@ pub use bundle::{
     SigstoreBundle, fixture_bundle, fixture_bundle_for_statement,
     fixture_sensitive_data_report_bundle, write_fixture_bundle, write_fixture_bundle_for_statement,
 };
-pub use online::{OnlineSigstoreSigner, SigstoreEndpoints};
+pub use online::{OnlineSigstoreSigner, SigstoreEndpoints, resolve_cosign_binary};
 pub use statement::{
     ArtifactPair, SensitiveDataReportArtifact, build_sensitive_data_report_statement,
     build_statement,
