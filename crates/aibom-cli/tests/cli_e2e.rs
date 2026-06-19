@@ -19,6 +19,12 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 use tempfile::TempDir;
 
+// The scanner stamps CARGO_PKG_VERSION into the scan.scanner/adapter version and
+// the sensitive-data scannerVersion. These report fixtures stand in for emitted
+// artifacts, so they track the workspace version rather than a hardcoded string;
+// scripts/check-version-consistency.py keeps the rest of the sync set aligned.
+const EXPECTED_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 const FIXTURE_SURFACE_SIGNER: &str = "repo:customer/reeve-config:ref:refs/heads/main";
 const REGISTRY_DATASET_NAME: &str = "mcp-servers";
 const REGISTRY_LATEST_PATH: &str = "datasets/mcp-servers/latest.json";
@@ -2276,9 +2282,9 @@ fn report_472_fixture_aibom() -> serde_json::Value {
                 }
             ],
             "scan": {
-                "adapter": {"name": "mcp", "version": "0.3.9"},
+                "adapter": {"name": "mcp", "version": EXPECTED_VERSION},
                 "scanId": "report-472-rollup",
-                "scanner": {"name": "reeve", "version": "0.3.9"},
+                "scanner": {"name": "reeve", "version": EXPECTED_VERSION},
                 "target": {"description": "~ (redacted)", "kind": "filesystem"},
                 "timestamp": "2026-06-10T00:00:00Z"
             },
@@ -2337,7 +2343,7 @@ fn report_472_fixture_sensitive(scan_id: &str) -> serde_json::Value {
                 "customRules": [],
                 "metadataInventory": true,
                 "rulePacks": [{"id": "reeve-default-conversation-secrets", "version": "2026.05.0"}],
-                "scannerVersion": "0.3.9",
+                "scannerVersion": EXPECTED_VERSION,
                 "suppressions": []
             },
             "redaction": {
@@ -2347,7 +2353,7 @@ fn report_472_fixture_sensitive(scan_id: &str) -> serde_json::Value {
             "reportId": format!("sdr-{scan_id}"),
             "scan": {
                 "scanId": scan_id,
-                "scanner": {"name": "reeve", "version": "0.3.9"},
+                "scanner": {"name": "reeve", "version": EXPECTED_VERSION},
                 "target": {"description": "~ (redacted)", "kind": "filesystem"},
                 "timestamp": "2026-06-10T00:00:00Z"
             },
