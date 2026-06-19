@@ -45,7 +45,7 @@ dependencies = [
 
 [[package]]
 name = "aibom-cli"
-version = "0.3.9"
+version = "0.3.10"
 dependencies = [
  "aibom-core",
  "aibom-policy",
@@ -67,7 +67,7 @@ dependencies = [
 
 [[package]]
 name = "aibom-core"
-version = "0.3.9"
+version = "0.3.10"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -80,7 +80,7 @@ dependencies = [
 
 [[package]]
 name = "aibom-policy"
-version = "0.3.9"
+version = "0.3.10"
 dependencies = [
  "aibom-core",
  "anyhow",
@@ -94,7 +94,7 @@ dependencies = [
 
 [[package]]
 name = "aibom-scanner"
-version = "0.3.9"
+version = "0.3.10"
 dependencies = [
  "aibom-core",
  "anyhow",
@@ -117,7 +117,7 @@ dependencies = [
 
 [[package]]
 name = "aibom-signer"
-version = "0.3.9"
+version = "0.3.10"
 dependencies = [
  "aibom-core",
  "anyhow",
@@ -132,7 +132,7 @@ dependencies = [
 
 [[package]]
 name = "aibom-validator"
-version = "0.3.9"
+version = "0.3.10"
 dependencies = [
  "aibom-core",
  "aibom-signer",
