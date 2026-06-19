@@ -79,6 +79,9 @@ python3 scripts/check-schema-docs.py || fail "schema docs out of sync"
 step "deployment template contract"
 python3 scripts/check-deploy-templates.py || fail "deploy templates"
 
+step "workflow pinning + release permissions contract"
+python3 scripts/check-workflow-pinning.py || fail "workflow pinning / release permissions"
+
 step "private boundary contract"
 python3 scripts/check-private-boundary.py || fail "private boundary"
 
