@@ -51,7 +51,7 @@ remote_head="$(git rev-parse origin/main)"
 [ "${local_head}" = "${remote_head}" ] || fail "local main ${local_head} != origin/main ${remote_head}; sync first"
 echo "    ok: ${local_head}"
 
-step "version matches Cargo.toml workspace version"
+step "requested version matches Cargo.toml workspace version"
 cargo_version="$(grep -m1 '^version = ' Cargo.toml | sed -E 's/version = "([^"]+)"/\1/')"
 [ "${cargo_version}" = "${VERSION}" ] || fail "requested ${VERSION} != Cargo.toml ${cargo_version}"
 echo "    ok: ${VERSION}"
@@ -65,23 +65,15 @@ if git ls-remote --tags origin "${TAG}" | grep -q "refs/tags/${TAG}"; then
 fi
 echo "    ok: ${TAG} is free"
 
-step "Cargo.lock pins workspace crates to ${VERSION}"
-for crate in aibom-core aibom-cli aibom-scanner aibom-signer aibom-validator aibom-policy; do
-  locked="$(awk -v c="\"${crate}\"" '
-    $1=="name" && $3==c {found=1; next}
-    found && $1=="version" {gsub(/"/,"",$3); print $3; exit}
-  ' Cargo.lock)"
-  [ "${locked}" = "${VERSION}" ] || fail "Cargo.lock ${crate} pinned at '${locked}', expected ${VERSION} (run cargo build)"
-done
-echo "    ok: all workspace crates at ${VERSION}"
+# Cargo.lock pins, README verify-download examples, and policy bundle presence
+# for the Cargo.toml version are the version sync set; that logic lives in one
+# place (check-version-consistency.py), not duplicated here.
+step "version sync set consistency"
+python3 scripts/check-version-consistency.py || fail "version consistency contract"
 
-step "policy bundle exists for ${VERSION} and reproduces"
-for ext in wasm json provenance.json; do
-  f="crates/aibom-policy/bundles/${VERSION}.${ext}"
-  [ -f "${f}" ] || fail "missing policy bundle file ${f} (run scripts/build-policy-bundle.sh --write)"
-done
+step "policy bundle reproduces for ${VERSION}"
 bash scripts/build-policy-bundle.sh --check || fail "policy bundle reproducibility check"
-echo "    ok: bundle present + reproducible"
+echo "    ok: bundle reproducible"
 
 step "current HEAD has required CI checks green"
 slug="$(gh repo view --json nameWithOwner -q .nameWithOwner)"

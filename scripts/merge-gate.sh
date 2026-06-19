@@ -56,6 +56,9 @@ fi
 
 # --- local checks: call the real scripts/commands, in CI order ---------------
 
+step "version sync set consistency"
+python3 scripts/check-version-consistency.py || fail "version consistency contract"
+
 step "cargo fmt --all -- --check"
 cargo fmt --all -- --check || fail "rustfmt: run 'cargo fmt --all'"
 
