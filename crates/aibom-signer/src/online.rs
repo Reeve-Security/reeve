@@ -47,9 +47,10 @@ impl Default for SigstoreEndpoints {
 /// - `explicit` is `None`: `cosign` is resolved from `PATH` exactly once to the
 ///   first existing regular file named `cosign`, returning its absolute path.
 ///   If none is found an error is returned.
-/// - Unix only: if the directory holding the chosen binary is world-writable
-///   without the sticky bit, resolution is refused. This check is skipped on
-///   non-unix platforms.
+/// - Unix only: the resolved cosign FILE must not be world-writable (resolution
+///   is refused if it is). A world-writable containing DIRECTORY only emits a
+///   stderr warning and proceeds (the standard /usr/local/bin is 0777 on many CI
+///   runners). Permission checks are skipped on non-unix platforms.
 pub fn resolve_cosign_binary(explicit: Option<OsString>) -> Result<PathBuf> {
     match explicit {
         Some(value) => {
@@ -66,7 +67,7 @@ pub fn resolve_cosign_binary(explicit: Option<OsString>) -> Result<PathBuf> {
                     candidate.display()
                 ));
             }
-            refuse_world_writable_parent(&candidate)?;
+            vet_cosign_permissions(&candidate)?;
             Ok(candidate)
         }
         None => {
@@ -89,7 +90,7 @@ pub fn resolve_cosign_binary(explicit: Option<OsString>) -> Result<PathBuf> {
                         Err(_) => continue,
                     }
                 };
-                refuse_world_writable_parent(&absolute)?;
+                vet_cosign_permissions(&absolute)?;
                 return Ok(absolute);
             }
             Err(anyhow!(
@@ -99,36 +100,46 @@ pub fn resolve_cosign_binary(explicit: Option<OsString>) -> Result<PathBuf> {
     }
 }
 
-/// Refuse to resolve a cosign binary whose containing directory is
-/// world-writable without the sticky bit, since any local user could swap the
-/// binary out from under us. Unix only; a no-op elsewhere.
+/// Vet the resolved cosign binary's permissions. Unix only; a no-op elsewhere.
+///
+/// HARD failure if the cosign FILE itself is world-writable, since any local
+/// user could overwrite the trusted binary in place. The containing DIRECTORY
+/// being world-writable is a weaker signal (the standard cosign location
+/// /usr/local/bin is 0777 on many CI runners and container images), so it only
+/// emits a stderr warning and proceeds.
 #[cfg(unix)]
-fn refuse_world_writable_parent(binary: &Path) -> Result<()> {
+fn vet_cosign_permissions(binary: &Path) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
-    let Some(parent) = binary.parent() else {
-        return Ok(());
-    };
-    let metadata = std::fs::metadata(parent).with_context(|| {
-        format!(
-            "inspect permissions of cosign directory {}",
-            parent.display()
-        )
-    })?;
-    let mode = metadata.permissions().mode();
-    let world_writable = mode & 0o002 != 0;
-    let sticky = mode & 0o1000 != 0;
-    if world_writable && !sticky {
+    let file_mode = std::fs::metadata(binary)
+        .with_context(|| format!("inspect permissions of cosign {}", binary.display()))?
+        .permissions()
+        .mode();
+    if file_mode & 0o002 != 0 {
         return Err(anyhow!(
-            "refusing to resolve cosign from world-writable directory {}; \
-             move cosign to a non-world-writable location or set REEVE_COSIGN_BIN",
-            parent.display()
+            "refusing to use world-writable cosign binary {}; \
+             any local user could overwrite it. Fix its permissions or set REEVE_COSIGN_BIN",
+            binary.display()
         ));
+    }
+    if let Some(parent) = binary.parent()
+        && let Ok(metadata) = std::fs::metadata(parent)
+    {
+        let mode = metadata.permissions().mode();
+        let world_writable = mode & 0o002 != 0;
+        let sticky = mode & 0o1000 != 0;
+        if world_writable && !sticky {
+            eprintln!(
+                "warning: cosign resolved from world-writable directory {}; \
+                 ensure this PATH entry is trusted",
+                parent.display()
+            );
+        }
     }
     Ok(())
 }
 
 #[cfg(not(unix))]
-fn refuse_world_writable_parent(_binary: &Path) -> Result<()> {
+fn vet_cosign_permissions(_binary: &Path) -> Result<()> {
     Ok(())
 }
 
@@ -286,17 +297,31 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn explicit_world_writable_dir_is_refused() {
+    fn explicit_world_writable_dir_warns_but_resolves() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let cosign = dir.path().join("cosign");
+        write_fake_cosign(&cosign); // file is 0755 (not world-writable)
+        // World-writable directory, no sticky bit: standard /usr/local/bin shape.
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o777)).unwrap();
+        let resolved = resolve_cosign_binary(Some(cosign.clone().into_os_string()))
+            .expect("world-writable directory must warn, not refuse");
+        assert_eq!(resolved, cosign);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn explicit_world_writable_cosign_file_is_refused() {
         use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
         let cosign = dir.path().join("cosign");
         write_fake_cosign(&cosign);
-        // World-writable, no sticky bit.
-        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o777)).unwrap();
+        // The cosign FILE itself is world-writable: any local user could swap it.
+        std::fs::set_permissions(&cosign, std::fs::Permissions::from_mode(0o777)).unwrap();
         let err = resolve_cosign_binary(Some(cosign.into_os_string()))
-            .expect_err("world-writable cosign directory must be refused");
+            .expect_err("world-writable cosign binary must be refused");
         assert!(
-            err.to_string().contains("world-writable"),
+            err.to_string().contains("world-writable cosign binary"),
             "unexpected error: {err}"
         );
     }
