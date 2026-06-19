@@ -94,6 +94,55 @@ print(matches[0].get('conclusion') or 'pending')
   echo "    ok: ${name}"
 done
 
+# v0.3.10 shipped a cosign-signing regression because live-sigstore-acceptance
+# only runs on a tag (or a labeled PR), so the signing change was never exercised
+# by the live Sigstore path until AFTER the tag. If anything in the signing /
+# release-sensitive surface changed since the last release, REQUIRE a successful
+# live-sigstore-acceptance run for THIS exact HEAD before allowing the tag.
+step "live-sigstore-acceptance required when signing/release-sensitive paths changed"
+last_tag="$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null || true)"
+if [ -n "${last_tag}" ]; then
+  changed_files="$(git diff --name-only "${last_tag}..HEAD")"
+  echo "    last release tag: ${last_tag}"
+else
+  # No prior release tag: treat the whole tree as changed, so the live run is
+  # required for the first release rather than silently skipped.
+  changed_files="$(git ls-files)"
+  echo "    no prior release tag; treating all tracked files as changed"
+fi
+
+if printf '%s\n' "${changed_files}" | python3 scripts/release-sensitive-paths.py; then
+  echo "    signing/release-sensitive paths changed; live-sigstore-acceptance required for HEAD"
+  echo "    changed sensitive paths:"
+  printf '%s\n' "${changed_files}" \
+    | python3 -c "
+import sys
+from importlib import util
+spec = util.spec_from_file_location('rsp', 'scripts/release-sensitive-paths.py')
+mod = util.module_from_spec(spec); spec.loader.exec_module(mod)
+for p in mod.matching_paths(sys.stdin.read().splitlines()):
+    print('      - ' + p)
+"
+  sigstore_json="$(gh run list --repo "${slug}" \
+    --workflow live-sigstore-acceptance.yml \
+    --json headSha,conclusion,status,databaseId \
+    --limit 50 2>/dev/null || true)"
+  [ -n "${sigstore_json}" ] || fail "could not query live-sigstore-acceptance runs from ${slug}"
+  sigstore_ok="$(printf '%s' "${sigstore_json}" | python3 -c "
+import sys, json
+head = sys.argv[1]
+runs = json.load(sys.stdin)
+ok = any(r.get('headSha') == head and r.get('conclusion') == 'success' for r in runs)
+print('yes' if ok else 'no')
+" "${local_head}")"
+  if [ "${sigstore_ok}" != "yes" ]; then
+    fail "signing/release-sensitive paths changed since ${last_tag:-<no prior tag>}; no successful live-sigstore-acceptance run found for HEAD ${local_head}. Trigger it (gh workflow run live-sigstore-acceptance.yml --ref ${branch}) and re-run release-gate."
+  fi
+  echo "    ok: successful live-sigstore-acceptance run found for HEAD ${local_head}"
+else
+  echo "    no signing/release-sensitive paths changed since ${last_tag:-<no prior tag>}; live-sigstore pre-run not required"
+fi
+
 echo ""
 echo "release-gate: PASS. ${TAG} is ready to cut from ${local_head}."
 echo "release-gate: this gate never tags. To release, a human runs:"
