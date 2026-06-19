@@ -4502,7 +4502,7 @@ fn scan_sign_mode_real_fails_when_cosign_missing() {
         ])
         .assert()
         .failure()
-        .stderr(contains("--sign-mode real requires 'cosign'"))
+        .stderr(contains("--sign-mode real requires a working 'cosign'"))
         .stderr(contains("REEVE_COSIGN_BIN"))
         .stderr(contains("--sign-mode fixture"));
 
@@ -4606,7 +4606,7 @@ fn scan_reeve_sign_mode_env_enforces_real_when_cosign_missing() {
         ])
         .assert()
         .failure()
-        .stderr(contains("--sign-mode real requires 'cosign'"));
+        .stderr(contains("--sign-mode real requires a working 'cosign'"));
 }
 
 #[test]
