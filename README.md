@@ -38,15 +38,22 @@ Open source, runs locally. Nothing leaves the endpoint.
 
 ## Quickstart
 
-Install and run in under a minute. This skips signature verification; to
-verify the binary first, see [Verify your download](#verify-your-download).
+Install and run in under a minute. This is the convenience path and it skips
+signature verification. For production or fleet use, prefer the verified install:
+see [Verify your download](#verify-your-download).
 
-**Linux / macOS.** Install script, or download the release archive:
+**Linux / macOS.** Install script (convenience), or download the release archive:
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf \
   https://github.com/Reeve-Security/reeve/releases/latest/download/aibom-cli-installer.sh | sh
 ```
+
+The install script downloads the binary, verifies it with `cosign`, and only
+then installs it. Note this is trust-on-first-use: the script runs before it
+verifies anything, so piping it to your shell trusts the delivery path (HTTPS
+and GitHub release integrity) for that first step. For production or fleet
+rollouts, use the verified install below instead of piping to a shell.
 
 Prefer not to pipe a script to your shell? Download the `.tar.xz` archive
 from the [latest release](https://github.com/Reeve-Security/reeve/releases/latest)
