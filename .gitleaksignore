@@ -1,0 +1,32 @@
+# Historical synthetic secret fixtures, suppressed by commit-scoped fingerprints.
+# Generated against the CI gitleaks version (8.24.2). Each pins commit:file:rule:line
+# of a PAST occurrence only; it cannot suppress any new or current-tree literal.
+# Current tree is clean: literals de-literaled in #33 (see .gitleaks.toml +
+# scripts/check-no-raw-provider-secrets.py). Do not hand-edit; regenerate if history changes.
+
+0952c54097671459903728b32574ab2b374e6d6c:crates/aibom-cli/tests/cli_e2e.rs:aws-access-token:4979
+0952c54097671459903728b32574ab2b374e6d6c:crates/aibom-cli/tests/cli_e2e.rs:stripe-access-token:4983
+0952c54097671459903728b32574ab2b374e6d6c:crates/aibom-scanner/src/sensitive_data.rs:aws-access-token:1628
+0952c54097671459903728b32574ab2b374e6d6c:crates/aibom-scanner/src/sensitive_data.rs:aws-access-token:2364
+0952c54097671459903728b32574ab2b374e6d6c:crates/aibom-scanner/src/sensitive_data.rs:stripe-access-token:2376
+0952c54097671459903728b32574ab2b374e6d6c:scripts/check-release-sensitive-data-flags.py:aws-access-token:17
+0a4440c016bf5e17cc7d884fe5d3f2797ff07de4:crates/aibom-scanner/src/sensitive_data.rs:aws-access-token:3367
+0a4440c016bf5e17cc7d884fe5d3f2797ff07de4:crates/aibom-scanner/src/sensitive_data.rs:aws-access-token:3368
+0a4440c016bf5e17cc7d884fe5d3f2797ff07de4:crates/aibom-scanner/src/sensitive_data.rs:aws-access-token:3427
+0a4440c016bf5e17cc7d884fe5d3f2797ff07de4:crates/aibom-scanner/src/sensitive_data.rs:aws-access-token:3864
+95640248b2913cdc8c7c538fee8479e618ae0d47:crates/aibom-cli/tests/cli_e2e.rs:aws-access-token:5063
+95640248b2913cdc8c7c538fee8479e618ae0d47:crates/aibom-cli/tests/cli_e2e.rs:stripe-access-token:5067
+95640248b2913cdc8c7c538fee8479e618ae0d47:crates/aibom-scanner/src/sensitive_data.rs:aws-access-token:1628
+95640248b2913cdc8c7c538fee8479e618ae0d47:crates/aibom-scanner/src/sensitive_data.rs:aws-access-token:2364
+95640248b2913cdc8c7c538fee8479e618ae0d47:crates/aibom-scanner/src/sensitive_data.rs:stripe-access-token:2376
+95640248b2913cdc8c7c538fee8479e618ae0d47:scripts/check-release-sensitive-data-flags.py:aws-access-token:17
+be3538e23e65bcdbc2bf2202b069c1d20d19afc0:crates/aibom-cli/tests/cli_e2e.rs:aws-access-token:5024
+be3538e23e65bcdbc2bf2202b069c1d20d19afc0:crates/aibom-cli/tests/cli_e2e.rs:stripe-access-token:5028
+be3538e23e65bcdbc2bf2202b069c1d20d19afc0:crates/aibom-scanner/src/sensitive_data.rs:aws-access-token:1638
+be3538e23e65bcdbc2bf2202b069c1d20d19afc0:crates/aibom-scanner/src/sensitive_data.rs:aws-access-token:2386
+be3538e23e65bcdbc2bf2202b069c1d20d19afc0:crates/aibom-scanner/src/sensitive_data.rs:stripe-access-token:2398
+be3538e23e65bcdbc2bf2202b069c1d20d19afc0:scripts/check-release-sensitive-data-flags.py:aws-access-token:17
+c3d4bf63c80c1c3177a0fd70a3f6aeb7a338ebaa:crates/aibom-scanner/src/sensitive_data.rs:aws-access-token:3367
+c3d4bf63c80c1c3177a0fd70a3f6aeb7a338ebaa:crates/aibom-scanner/src/sensitive_data.rs:aws-access-token:3368
+c3d4bf63c80c1c3177a0fd70a3f6aeb7a338ebaa:crates/aibom-scanner/src/sensitive_data.rs:aws-access-token:3427
+c3d4bf63c80c1c3177a0fd70a3f6aeb7a338ebaa:crates/aibom-scanner/src/sensitive_data.rs:aws-access-token:3864

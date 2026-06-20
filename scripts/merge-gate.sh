@@ -91,11 +91,17 @@ python3 scripts/check-private-boundary.py || fail "private boundary"
 step "tools OSS readiness contract"
 python3 scripts/check-tools-oss-readiness.py || fail "tools OSS readiness"
 
+step "no raw provider-secret literals in tracked source"
+python3 scripts/check-no-raw-provider-secrets.py || fail "raw provider-secret literal in tracked source (#33)"
+
 step "docs-only paths-ignore helper self-test"
 python3 scripts/pr-docs-only.py --self-test || fail "pr-docs-only self-test (helper / ci.yml paths-ignore drift)"
 
 step "release-sensitive-paths helper self-test"
 python3 scripts/release-sensitive-paths.py --self-test || fail "release-sensitive-paths self-test (signing/release surface drift)"
+
+step "no-raw-provider-secrets helper self-test"
+python3 scripts/check-no-raw-provider-secrets.py --self-test || fail "check-no-raw-provider-secrets self-test (#33)"
 
 step "release sensitive-data flags contract"
 artifacts_dir="$(mktemp -d)"

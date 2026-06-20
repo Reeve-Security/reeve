@@ -58,8 +58,13 @@ const CONVERSATION_SCAN_OVERLAP_BYTES: usize = 8 * 1024;
 const MAX_MATCH_SPAN: usize = CONVERSATION_SCAN_OVERLAP_BYTES;
 const PEM_PRIVATE_KEY_PATTERN_CLASS: &str = "private-key-pem";
 const RULE_COVERAGE_WARNING_SPAN_EXCEEDS_WINDOW: &str = "match-span-may-exceed-streaming-window";
-const KNOWN_PLACEHOLDER_SECRET_TOKENS: &[&str] =
-    &["AKIAIOSFODNN7EXAMPLE", "AKIAIOSFODNN7EXAMPLEFAKE"];
+// Assembled from split fragments so no contiguous AWS-shaped literal sits in
+// source (#33). `concat!` is const-evaluated, so these are byte-identical to the
+// prior literals at compile time and runtime matching is unchanged.
+const KNOWN_PLACEHOLDER_SECRET_TOKENS: &[&str] = &[
+    concat!("AKIA", "IOSFODNN7", "EXAMPLE"),
+    concat!("AKIA", "IOSFODNN7", "EXAMPLE", "FAKE"),
+];
 const PLACEHOLDER_SECRET_MARKERS: &[&str] = &["example", "dummy", "placeholder", "fake"];
 
 #[derive(Debug, Clone, Default)]
@@ -2461,7 +2466,7 @@ enabled = true
         let root = tempdir().unwrap();
         let out = tempdir().unwrap();
         let log_key = fixture_aws_access_key();
-        let ignored_ldb_key = "AKIA7Q4M2Z9X8C5N1P4S";
+        let ignored_ldb_key = format!("AKIA{}", "7Q4M2Z9X8C5N1P4S");
         write_fixture(
             root.path(),
             "AppData/Local/Packages/Claude_abcdef/LocalCache/Roaming/Claude/IndexedDB/https_claude.ai_0.indexeddb.leveldb/000003.log",
@@ -2470,7 +2475,7 @@ enabled = true
         write_fixture(
             root.path(),
             "AppData/Local/Packages/Claude_abcdef/LocalCache/Roaming/Claude/IndexedDB/https_claude.ai_0.indexeddb.leveldb/000004.ldb",
-            ignored_ldb_key,
+            &ignored_ldb_key,
         );
 
         let target = Target::filesystem(root.path().to_path_buf());
@@ -2508,7 +2513,7 @@ enabled = true
             "~/AppData/Local/Packages/Claude_*/LocalCache/Roaming/Claude/IndexedDB/*.leveldb/<file-1>"
         );
         assert!(!report_text.contains(&log_key));
-        assert!(!report_text.contains(ignored_ldb_key));
+        assert!(!report_text.contains(&ignored_ldb_key));
         assert!(!report_text.contains("Claude_abcdef"));
         assert!(!report_text.contains("000003.log"));
         assert!(!report_text.contains("000004.ldb"));
@@ -2659,14 +2664,21 @@ enabled = true
         assert!(!report_text.contains("OtherSecretSession"));
     }
 
+    // The AWS docs placeholder key, assembled from split fragments (#33) so no
+    // contiguous AKIA-shaped literal sits in source; byte-identical at runtime.
+    fn fixture_aws_placeholder_key() -> String {
+        format!("AKIA{}", "IOSFODNN7EXAMPLE")
+    }
+
     #[test]
     fn opt_in_report_contains_metadata_only() {
         let root = tempdir().unwrap();
         let out = tempdir().unwrap();
+        let placeholder = fixture_aws_placeholder_key();
         write_fixture(
             root.path(),
             ".claude/projects/AcquisitionCodename/transcript.jsonl",
-            "AKIAIOSFODNN7EXAMPLE must not appear in report",
+            &format!("{placeholder} must not appear in report"),
         );
         let target = Target::filesystem(root.path().to_path_buf());
 
@@ -2696,7 +2708,7 @@ enabled = true
                 .unwrap()
                 .is_empty()
         );
-        assert!(!report_text.contains("AKIAIOSFODNN7EXAMPLE"));
+        assert!(!report_text.contains(&placeholder));
         assert!(!report_text.contains("AcquisitionCodename"));
     }
 
@@ -2708,9 +2720,16 @@ enabled = true
         let anthropic_key = fixture_anthropic_key();
         let openai_key = fixture_openai_key();
         let stripe_key = fixture_stripe_key();
+        // JWT segments assembled from split fragments (#33): the `eyJ` header
+        // prefix is joined at runtime so no contiguous JWT-shaped literal sits
+        // in source. The concatenated value is byte-identical to before.
         let jwt = [
-            "eyJhbGciOiJIUzI1NiJ9.",
-            "eyJzdWIiOiIxMjM0NTY3ODkwIn0.",
+            "ey",
+            "J",
+            "hbGciOiJIUzI1NiJ9.",
+            "ey",
+            "J",
+            "zdWIiOiIxMjM0NTY3ODkwIn0.",
             "signature__",
         ]
         .concat();
@@ -2856,10 +2875,12 @@ enabled = true
     fn default_secret_rules_ignore_placeholder_and_low_entropy_examples() {
         let root = tempdir().unwrap();
         let out = tempdir().unwrap();
-        let aws_example = "AKIAIOSFODNN7EXAMPLE";
-        let aws_example_fake = "AKIAIOSFODNN7EXAMPLEFAKE";
-        let anthropic_repeated = "sk-ant-api03-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-        let anthropic_sequence = "sk-ant-api03-abcdefghijklmnopqrstuvwxyz";
+        // Assembled from split fragments (#33); byte-identical at runtime.
+        let aws_example = format!("AKIA{}", "IOSFODNN7EXAMPLE");
+        let aws_example_fake = format!("AKIA{}", "IOSFODNN7EXAMPLEFAKE");
+        let anthropic_repeated =
+            format!("sk-{}-{}", "ant", "api03-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        let anthropic_sequence = format!("sk-{}-{}", "ant", "api03-abcdefghijklmnopqrstuvwxyz");
         write_fixture(
             root.path(),
             ".claude/projects/DocsExamples/transcript.jsonl",
@@ -2891,10 +2912,10 @@ enabled = true
             findings.is_empty(),
             "placeholder keys must not fire: {findings:?}"
         );
-        assert!(!report_text.contains(aws_example));
-        assert!(!report_text.contains(aws_example_fake));
-        assert!(!report_text.contains(anthropic_repeated));
-        assert!(!report_text.contains(anthropic_sequence));
+        assert!(!report_text.contains(&aws_example));
+        assert!(!report_text.contains(&aws_example_fake));
+        assert!(!report_text.contains(&anthropic_repeated));
+        assert!(!report_text.contains(&anthropic_sequence));
         assert!(!report_text.contains("DocsExamples"));
     }
 
@@ -3246,20 +3267,24 @@ enabled = true
         fs::write(path, content).unwrap();
     }
 
+    // Provider-shaped test fixtures are assembled from split fragments so no
+    // contiguous provider-looking literal sits in source (#33). Each builder
+    // returns bytes identical to the prior literal, so detection/redaction
+    // assertions that reference these values are unchanged.
     fn fixture_aws_access_key() -> String {
-        "AKIA7Q4M2Z9X8C5N1P3R".to_string()
+        format!("AKIA{}", "7Q4M2Z9X8C5N1P3R")
     }
 
     fn fixture_anthropic_key() -> String {
-        "sk-ant-api03-vB7qL9mR2xT6pW4zY8nC0dE5fG1h".to_string()
+        format!("sk-{}-{}", "ant", "api03-vB7qL9mR2xT6pW4zY8nC0dE5fG1h")
     }
 
     fn fixture_openai_key() -> String {
-        "sk-proj-vB7qL9mR2xT6pW4zY8nC0dE5fG1h".to_string()
+        format!("sk-{}-{}", "proj", "vB7qL9mR2xT6pW4zY8nC0dE5fG1h")
     }
 
     fn fixture_stripe_key() -> String {
-        "sk_live_vB7qL9mR2xT6pW4zY8nC0dE5fG1h".to_string()
+        format!("sk_{}_{}", "live", "vB7qL9mR2xT6pW4zY8nC0dE5fG1h")
     }
 
     fn fixture_oauth_client_secret() -> String {
@@ -3364,8 +3389,8 @@ enabled = true
         // whole-file scan: no match dropped, none double-counted (#13).
         let root = tempdir().unwrap();
         let key_a = fixture_aws_access_key();
-        let key_b = "AKIA7Q4M2Z9X8C5N1P4S".to_string();
-        let key_c = "AKIA3D5F7H9K2M4P6R8T".to_string();
+        let key_b = format!("AKIA{}", "7Q4M2Z9X8C5N1P4S");
+        let key_c = format!("AKIA{}", "3D5F7H9K2M4P6R8T");
         // Vary spacing so keys fall at different positions relative to the
         // chunk grid.
         let content = format!(
@@ -3424,7 +3449,7 @@ enabled = true
         // it via skip telemetry rather than streaming it as text (#13).
         let root = tempdir().unwrap();
         let binary = {
-            let mut bytes = b"AKIA7Q4M2Z9X8C5N1P3R".to_vec();
+            let mut bytes = format!("AKIA{}", "7Q4M2Z9X8C5N1P3R").into_bytes();
             bytes.push(0); // NUL marks the content binary
             bytes.extend_from_slice(b"more");
             bytes
@@ -3861,7 +3886,7 @@ enabled = true
         // before the byte-offset-consistent dedup + char_indices token offsets.
         let root = tempdir().unwrap();
         let key_a = fixture_aws_access_key();
-        let key_b = "AKIA7Q4M2Z9X8C5N1P4S".to_string();
+        let key_b = format!("AKIA{}", "7Q4M2Z9X8C5N1P4S");
         // Multibyte delimiters (emoji, accented text) and an invalid UTF-8 byte
         // sit right around where the chunk grid will fall, so the lossy decode
         // inserts multibyte chars and U+FFFD near the carry boundary.
