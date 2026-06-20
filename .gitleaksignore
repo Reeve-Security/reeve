@@ -1,0 +1,29 @@
+# Commit-scoped gitleaks fingerprints (#33).
+#
+# These suppress provider-shaped credential literals as they existed in PAST
+# commits only. The whole-file gitleaks allowlist for these files was removed in
+# #33 so the CURRENT and FUTURE tree is enforced clean; every credential in the
+# working tree is now assembled from split fragments at runtime, and
+# scripts/check-no-raw-provider-secrets.py guards against regressions.
+#
+# Each fingerprint is `commit:file:rule:line`, so it suppresses ONLY the exact
+# historical occurrence. A new literal (different commit/line) is NOT suppressed.
+# These are synthetic detector test fixtures, never real credentials.
+0952c54097671459903728b32574ab2b374e6d6c:crates/aibom-cli/tests/cli_e2e.rs:stripe-access-token:4983
+0952c54097671459903728b32574ab2b374e6d6c:crates/aibom-scanner/src/sensitive_data.rs:generic-api-key:1628
+0952c54097671459903728b32574ab2b374e6d6c:crates/aibom-scanner/src/sensitive_data.rs:stripe-access-token:2376
+0952c54097671459903728b32574ab2b374e6d6c:scripts/check-release-sensitive-data-flags.py:generic-api-key:17
+0a4440c016bf5e17cc7d884fe5d3f2797ff07de4:crates/aibom-scanner/src/sensitive_data.rs:generic-api-key:3367
+0a4440c016bf5e17cc7d884fe5d3f2797ff07de4:crates/aibom-scanner/src/sensitive_data.rs:generic-api-key:3368
+0a4440c016bf5e17cc7d884fe5d3f2797ff07de4:crates/aibom-scanner/src/sensitive_data.rs:generic-api-key:3864
+95640248b2913cdc8c7c538fee8479e618ae0d47:crates/aibom-cli/tests/cli_e2e.rs:stripe-access-token:5067
+95640248b2913cdc8c7c538fee8479e618ae0d47:crates/aibom-scanner/src/sensitive_data.rs:generic-api-key:1628
+95640248b2913cdc8c7c538fee8479e618ae0d47:crates/aibom-scanner/src/sensitive_data.rs:stripe-access-token:2376
+95640248b2913cdc8c7c538fee8479e618ae0d47:scripts/check-release-sensitive-data-flags.py:generic-api-key:17
+be3538e23e65bcdbc2bf2202b069c1d20d19afc0:crates/aibom-cli/tests/cli_e2e.rs:stripe-access-token:5028
+be3538e23e65bcdbc2bf2202b069c1d20d19afc0:crates/aibom-scanner/src/sensitive_data.rs:generic-api-key:1638
+be3538e23e65bcdbc2bf2202b069c1d20d19afc0:crates/aibom-scanner/src/sensitive_data.rs:stripe-access-token:2398
+be3538e23e65bcdbc2bf2202b069c1d20d19afc0:scripts/check-release-sensitive-data-flags.py:generic-api-key:17
+c3d4bf63c80c1c3177a0fd70a3f6aeb7a338ebaa:crates/aibom-scanner/src/sensitive_data.rs:generic-api-key:3367
+c3d4bf63c80c1c3177a0fd70a3f6aeb7a338ebaa:crates/aibom-scanner/src/sensitive_data.rs:generic-api-key:3368
+c3d4bf63c80c1c3177a0fd70a3f6aeb7a338ebaa:crates/aibom-scanner/src/sensitive_data.rs:generic-api-key:3864

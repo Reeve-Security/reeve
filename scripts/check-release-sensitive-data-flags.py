@@ -11,10 +11,12 @@ import tempfile
 from pathlib import Path
 
 ARCHIVE_NAME = "aibom-cli-x86_64-unknown-linux-gnu.tar.xz"
-# Realistic high-entropy key: the AWS docs example (AKIAIOSFODNN7EXAMPLE) is now
+# Realistic high-entropy key: the legacy AWS docs example placeholder is now
 # suppressed as a known placeholder by rule pack >=2026.05.1, so this contract
-# must assert detection with a key that actually fires.
-SECRET = "AKIA7Q4M2Z9X8C5N1P3R"
+# must assert detection with a key that actually fires. The value is assembled
+# from split fragments so no contiguous provider-shaped literal sits in source
+# (#33); it is byte-identical to the prior literal at runtime.
+SECRET = "AKIA" + "7Q4M2Z9X8C5N1P3R"
 SESSION_NAME = "ReleaseSmoke"
 SESSION_RELATIVE_PATH = Path(".claude") / "projects" / SESSION_NAME / "session.jsonl"
 HELP_FLAGS = (

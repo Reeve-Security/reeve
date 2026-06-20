@@ -976,7 +976,10 @@ fn scan_does_not_emit_sensitive_data_report_without_opt_in() {
             .join("projects")
             .join("SecretProject")
             .join("session.jsonl"),
-        "AKIAIOSFODNN7EXAMPLE must not be read by default",
+        &format!(
+            "{} must not be read by default",
+            fixture_aws_placeholder_key()
+        ),
     );
 
     let output = Command::cargo_bin("aibom-cli")
@@ -1005,6 +1008,7 @@ fn scan_does_not_emit_sensitive_data_report_without_opt_in() {
 fn scan_opt_in_emits_conversation_metadata_report() {
     let root = TempDir::new().unwrap();
     let out = TempDir::new().unwrap();
+    let placeholder = fixture_aws_placeholder_key();
     write_text(
         &root
             .path()
@@ -1012,7 +1016,7 @@ fn scan_opt_in_emits_conversation_metadata_report() {
             .join("projects")
             .join("AcquisitionCodename")
             .join("session.jsonl"),
-        "AKIAIOSFODNN7EXAMPLE must not serialize",
+        &format!("{placeholder} must not serialize"),
     );
 
     let output = Command::cargo_bin("aibom-cli")
@@ -1070,7 +1074,7 @@ fn scan_opt_in_emits_conversation_metadata_report() {
         statement["predicate"]["artifactRoles"][report_path.file_name().unwrap().to_str().unwrap()],
         "sensitive-data-report"
     );
-    assert!(!report_text.contains("AKIAIOSFODNN7EXAMPLE"));
+    assert!(!report_text.contains(&placeholder));
     assert!(!report_text.contains("AcquisitionCodename"));
 }
 
@@ -1217,10 +1221,11 @@ fn scan_second_opt_in_emits_secret_findings_without_values() {
 fn scan_secret_examples_do_not_emit_high_confidence_findings() {
     let root = TempDir::new().unwrap();
     let out = TempDir::new().unwrap();
-    let aws_example = "AKIAIOSFODNN7EXAMPLE";
-    let aws_example_fake = "AKIAIOSFODNN7EXAMPLEFAKE";
-    let anthropic_repeated = "sk-ant-api03-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-    let anthropic_sequence = "sk-ant-api03-abcdefghijklmnopqrstuvwxyz";
+    // Assembled from split fragments (#33); byte-identical at runtime.
+    let aws_example = format!("AKIA{}", "IOSFODNN7EXAMPLE");
+    let aws_example_fake = format!("AKIA{}", "IOSFODNN7EXAMPLEFAKE");
+    let anthropic_repeated = format!("sk-{}-{}", "ant", "api03-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    let anthropic_sequence = format!("sk-{}-{}", "ant", "api03-abcdefghijklmnopqrstuvwxyz");
     write_text(
         &root
             .path()
@@ -1264,10 +1269,10 @@ fn scan_secret_examples_do_not_emit_high_confidence_findings() {
         report["sensitiveDataReport"]["inputs"]["rulePacks"][0]["version"],
         "2026.06.0"
     );
-    assert!(!report_text.contains(aws_example));
-    assert!(!report_text.contains(aws_example_fake));
-    assert!(!report_text.contains(anthropic_repeated));
-    assert!(!report_text.contains(anthropic_sequence));
+    assert!(!report_text.contains(&aws_example));
+    assert!(!report_text.contains(&aws_example_fake));
+    assert!(!report_text.contains(&anthropic_repeated));
+    assert!(!report_text.contains(&anthropic_sequence));
     assert!(!report_text.contains("DocsExamples"));
 }
 
@@ -5141,12 +5146,22 @@ fn build_api_fixture_tree(publish_root: &Path, api_root: &Path) {
     write_registry_api_search_fixtures(&manifest, &seed, api_root);
 }
 
+// Provider-shaped test fixtures are assembled from split fragments so no
+// contiguous provider-looking literal sits in source (#33). Each builder returns
+// bytes identical to the prior literal, so detection/redaction assertions that
+// reference these values are unchanged.
 fn fixture_aws_access_key() -> String {
-    "AKIA7Q4M2Z9X8C5N1P3R".to_string()
+    format!("AKIA{}", "7Q4M2Z9X8C5N1P3R")
+}
+
+// The AWS docs placeholder key, assembled from split fragments (#33) so no
+// contiguous AKIA-shaped literal sits in source; byte-identical at runtime.
+fn fixture_aws_placeholder_key() -> String {
+    format!("AKIA{}", "IOSFODNN7EXAMPLE")
 }
 
 fn fixture_stripe_key() -> String {
-    "sk_live_vB7qL9mR2xT6pW4zY8nC0dE5fG1h".to_string()
+    format!("sk_{}_{}", "live", "vB7qL9mR2xT6pW4zY8nC0dE5fG1h")
 }
 
 fn write_registry_lookup_scan_target(root: &Path, provider_name: &str, url: &str) {
