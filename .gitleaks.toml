@@ -3,33 +3,29 @@ title = "Reeve repository boundary policy"
 [extend]
 useDefault = true
 
-[[allowlists]]
-description = "Repository fixtures and documented placeholder examples"
+# Singular [allowlist] form: the CI gitleaks (8.24.2) does not honor the plural
+# [[allowlists]] table, so all exemptions must live in this single block.
+[allowlist]
+description = "Repository fixtures, vendored spec data, and synthetic PEM detector fixtures"
 paths = [
   '''^schema/fixtures/aibom-v0.1.0/''',
   '''^schema/fixtures/aibom-v0.1.0-v0\.2\.0/''',
-  # Note: the former whole-file allowlist entries for the conversation
-  # secret-detector source (sensitive_data.rs / cli_e2e.rs) and the release
-  # smoke script were removed in #33. Those files no longer embed any contiguous
-  # provider-shaped literal: every credential is assembled from split fragments
-  # at runtime, and scripts/check-no-raw-provider-secrets.py enforces that.
-  # Official CycloneDX spec schemas bundled as test fixtures (#474): the SPDX
+  # Vendored CycloneDX spec schemas bundled as test fixtures (#474): the SPDX
   # license-ID list trips the generic-api-key entropy rule (license names look
   # like keys). Upstream spec content, no secrets.
   '''^crates/aibom-scanner/tests/data/cyclonedx/''',
 ]
-
-# Narrow, rule- and path-scoped allowlist (NOT a whole-file exemption): the
-# private-key PEM detector is exercised by fixture PEM blocks embedded in the
-# detector's own unit tests. Those blocks are synthetic (fake base64 bodies, not
-# real keys) and carry a unique sentinel so they can never be a real key. Allow
-# ONLY the `private-key` rule, ONLY in the detector source file. Provider-shaped
-# literals stay covered everywhere.
-[[allowlists]]
-description = "Synthetic PEM fixtures in the private-key detector unit tests (#33)"
-condition = "AND"
-targetRules = ["private-key"]
-paths = ['''^crates/aibom-scanner/src/sensitive_data\.rs$''']
+# The former whole-file exemptions for the conversation secret-detector source
+# (sensitive_data.rs / cli_e2e.rs) and the release smoke script were removed in
+# #33: those files no longer embed any contiguous provider-shaped literal (every
+# credential is assembled from split fragments at runtime, enforced by
+# scripts/check-no-raw-provider-secrets.py). The detector's own private-key unit
+# tests still embed synthetic PEM blocks (fake bodies, never real keys); exempt
+# those by CONTENT (the PEM header) rather than by whole-file path, so the broad
+# exemption stays gone and provider-shaped literals remain covered everywhere.
+regexes = [
+  '''-----BEGIN [A-Z0-9 ]{0,64}PRIVATE KEY-----''',
+]
 
 [[rules]]
 id = "github-token-extended"
