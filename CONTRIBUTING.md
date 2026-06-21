@@ -36,6 +36,13 @@ separate checklist.
 All three are verify-only. They never merge, tag, or publish; a human does those
 after the gate exits zero.
 
+`gitleaks` is a remote required CI check, not a local prerequisite: the merge gate
+does not run it, so you do not need gitleaks installed to contribute. Its version is
+pinned in `.gitleaks-version` (read by the CI job; `scripts/check-gitleaks-pinning.py`
+keeps CI from drifting off it). If you want to reproduce the secret scan locally,
+install that exact version (a newer or older gitleaks can change allowlist semantics
+and fingerprints, so matching the pinned version is what makes a local run trustworthy).
+
 ### Security advisory forks
 
 GitHub's temporary private advisory forks do not run Actions, so a fix worked in a
