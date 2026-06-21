@@ -94,6 +94,9 @@ python3 scripts/check-tools-oss-readiness.py || fail "tools OSS readiness"
 step "no raw provider-secret literals in tracked source"
 python3 scripts/check-no-raw-provider-secrets.py || fail "raw provider-secret literal in tracked source (#33)"
 
+step "gitleaks version pinned in one place (CI cannot drift)"
+python3 scripts/check-gitleaks-pinning.py || fail "gitleaks version pinning (#35)"
+
 step "docs-only paths-ignore helper self-test"
 python3 scripts/pr-docs-only.py --self-test || fail "pr-docs-only self-test (helper / ci.yml paths-ignore drift)"
 
@@ -102,6 +105,9 @@ python3 scripts/release-sensitive-paths.py --self-test || fail "release-sensitiv
 
 step "no-raw-provider-secrets helper self-test"
 python3 scripts/check-no-raw-provider-secrets.py --self-test || fail "check-no-raw-provider-secrets self-test (#33)"
+
+step "gitleaks-pinning helper self-test"
+python3 scripts/check-gitleaks-pinning.py --self-test || fail "check-gitleaks-pinning self-test (#35)"
 
 step "release sensitive-data flags contract"
 artifacts_dir="$(mktemp -d)"
