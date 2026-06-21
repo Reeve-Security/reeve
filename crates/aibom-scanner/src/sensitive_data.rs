@@ -2523,11 +2523,14 @@ enabled = true
     fn private_key_pem_blocks_emit_redacted_findings_without_key_body() {
         let root = tempdir().unwrap();
         let out = tempdir().unwrap();
-        let pem = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\nQyNTUxOQAAACCfixturebodymustneverappear9X8C5N1P3RabcDEF0123456789\n-----END OPENSSH PRIVATE KEY-----";
+        let pem = pem_block(
+            "OPENSSH",
+            "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\nQyNTUxOQAAACCfixturebodymustneverappear9X8C5N1P3RabcDEF0123456789",
+        );
         write_fixture(
             root.path(),
             ".claude/projects/PrivateKeyProject/transcript.jsonl",
-            pem,
+            &pem,
         );
 
         let target = Target::filesystem(root.path().to_path_buf());
@@ -3291,6 +3294,23 @@ enabled = true
         "Q7mZ9pL2xT6vN4cR8sU0wY3aB5dE1fG9".to_string()
     }
 
+    // PEM private-key fixtures assembled from split fragments so no full PEM
+    // marker sits in source (#36, mirrors #33); the returned bytes are identical
+    // to the prior literals, so detection / streaming / redaction tests are
+    // unchanged. scripts/check-no-raw-provider-secrets.py enforces the no-literal
+    // rule.
+    fn pem_block(label: &str, body: &str) -> String {
+        let d = "-----";
+        let key = concat!("PRIVATE", " KEY");
+        format!("{d}BEGIN {label} {key}{d}\n{body}\n{d}END {label} {key}{d}")
+    }
+
+    fn pem_begin_marker(label: &str) -> String {
+        let d = "-----";
+        let key = concat!("PRIVATE", " KEY");
+        format!("{d}BEGIN {label} {key}{d}")
+    }
+
     fn streaming_limits(max_file_bytes: u64, chunk_bytes: usize) -> ConversationScanLimits {
         ConversationScanLimits {
             max_file_bytes,
@@ -3579,9 +3599,7 @@ enabled = true
         // window and END lands many windows later, with the block spanning
         // multiple chunk boundaries.
         let body = "QWxpY2Vib2R5bXVzdG5ldmVyYXBwZWFy0123456789ABCDEF".repeat(40);
-        let pem = format!(
-            "-----BEGIN OPENSSH PRIVATE KEY-----\n{body}\n-----END OPENSSH PRIVATE KEY-----"
-        );
+        let pem = pem_block("OPENSSH", &body);
         assert!(
             pem.len() > overlap,
             "fixture PEM must exceed the overlap carry to exercise the gap"
@@ -3865,15 +3883,14 @@ enabled = true
         );
 
         // A realistic label must still match both paths.
-        let ok = "-----BEGIN OPENSSH PRIVATE KEY-----";
+        let ok = pem_begin_marker("OPENSSH");
         assert!(
-            find_pem_begin(ok).is_some(),
+            find_pem_begin(&ok).is_some(),
             "a normal label must be accepted by the streaming marker scan"
         );
-        let ok_block =
-            "-----BEGIN OPENSSH PRIVATE KEY-----\nbody\n-----END OPENSSH PRIVATE KEY-----";
+        let ok_block = pem_block("OPENSSH", "body");
         assert_eq!(
-            count_private_key_pem_blocks(ok_block),
+            count_private_key_pem_blocks(&ok_block),
             1,
             "a normal-label PEM block must be matched by the whole-read regex"
         );
