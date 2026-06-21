@@ -42,6 +42,11 @@ _OPENAI_PROJ = "sk" + "-" + "proj" + "-"
 _OPENAI_SK = "sk" + "-"
 _GITHUB_PAT = "gh" + "p" + "_"
 _JWT_HEAD = "ey" + "J"
+# PEM private-key marker fragments, split so this guard's own source holds no
+# contiguous full marker (the begin-dashes and the key-words / closing-dashes are
+# joined only at runtime).
+_PEM_BEGIN = "-" * 5 + "BEGIN "
+_PEM_KEY_SUFFIX = "PRIVATE" + " KEY" + "-" * 5
 
 
 # Each rule: (pattern-class, compiled regex). The regexes require a credential
@@ -68,6 +73,11 @@ def _build_rules() -> list[tuple[str, re.Pattern[str]]]:
         ("github-token", re.compile(_GITHUB_PAT + r"[A-Za-z0-9]{20,}")),
         # JWT: eyJ<base64>. (header segment of a JSON Web Token).
         ("jwt", re.compile(_JWT_HEAD + r"[A-Za-z0-9_-]{8,}\.")),
+        # PEM private-key block: a full begin-marker with an uppercase label
+        # (RSA / EC / OPENSSH) or unlabeled. Bare begin-prefixes and the
+        # production detector regex (label class [A-Z0-9 ]{0,64}, with brackets
+        # and digits) do not match: they lack the contiguous closing key marker.
+        ("private-key-pem", re.compile(_PEM_BEGIN + r"[A-Z ]{0,40}" + _PEM_KEY_SUFFIX)),
     ]
     return rules
 
@@ -181,6 +191,24 @@ def self_test() -> int:
     for sample in benigns:
         hits = scan_text(sample)
         check(not hits, f"benign sample should NOT be flagged: {sample!r}")
+
+    # PEM private-key markers: every real label and the unlabeled form must be
+    # flagged; the production detector-regex form and a bare begin-prefix must NOT.
+    for label in ("RSA ", "EC ", "OPENSSH ", ""):
+        marker = _PEM_BEGIN + label + _PEM_KEY_SUFFIX
+        check(
+            any(cls == "private-key-pem" for _, cls, _ in scan_text(marker)),
+            f"PEM marker with label {label!r} should be flagged",
+        )
+    detector_form = _PEM_BEGIN + "[A-Z0-9 ]{0,64}" + _PEM_KEY_SUFFIX
+    check(
+        not any(cls == "private-key-pem" for _, cls, _ in scan_text(detector_form)),
+        "production detector regex form must not be flagged",
+    )
+    check(
+        not any(cls == "private-key-pem" for _, cls, _ in scan_text(_PEM_BEGIN)),
+        "bare begin-prefix must not be flagged",
+    )
 
     # This guard's own source MUST be clean (no contiguous literal of its own).
     own_hits = scan_files([sys.argv[0] if sys.argv and sys.argv[0] else __file__])
