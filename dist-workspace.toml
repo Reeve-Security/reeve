@@ -21,7 +21,7 @@ targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-da
 # .github/workflows/release.yml, but build platform archives on Blacksmith to
 # avoid GitHub-hosted macOS minute multipliers.
 [dist.github-custom-runners]
-"global" = { runner = "blacksmith-4vcpu-ubuntu-2204", host = "x86_64-unknown-linux-gnu" }
+"global" = { runner = "ubuntu-latest", host = "x86_64-unknown-linux-gnu" }
 "aarch64-apple-darwin" = { runner = "blacksmith-6vcpu-macos-15", host = "aarch64-apple-darwin" }
 "aarch64-unknown-linux-gnu" = { runner = "blacksmith-4vcpu-ubuntu-2204-arm", host = "aarch64-unknown-linux-gnu" }
 "x86_64-apple-darwin" = { runner = "blacksmith-6vcpu-macos-15", host = "aarch64-apple-darwin" }

@@ -54,7 +54,7 @@ on:
 jobs:
   # Run 'dist plan' (or host) to determine what tasks we need to do
   plan:
-    runs-on: "blacksmith-4vcpu-ubuntu-2204"
+    runs-on: "ubuntu-latest"
     outputs:
       val: ${{ steps.plan.outputs.manifest }}
       tag: ${{ !github.event.pull_request && github.ref_name || '' }}
@@ -182,7 +182,7 @@ jobs:
     needs:
       - plan
       - build-local-artifacts
-    runs-on: "blacksmith-4vcpu-ubuntu-2204"
+    runs-on: "ubuntu-latest"
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BUILD_MANIFEST_NAME: target/distrib/global-dist-manifest.json
@@ -383,7 +383,7 @@ jobs:
       - host
     # "host" must run to completion; no publish jobs remain in v0.1.
     if: ${{ always() && needs.host.result == 'success' }}
-    runs-on: "blacksmith-4vcpu-ubuntu-2204"
+    runs-on: "ubuntu-latest"
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
