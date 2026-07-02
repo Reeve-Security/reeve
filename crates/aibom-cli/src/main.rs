@@ -1601,7 +1601,16 @@ fn resolve_sign_requested(mode: SignMode) -> Result<bool> {
         SignMode::Fixture => Ok(false),
         SignMode::Auto => {
             if cosign_available() {
-                Ok(true)
+                if keyless_signing_context_available() {
+                    Ok(true)
+                } else {
+                    eprintln!(
+                        "WARN real signing unavailable (cosign present, no keyless signing \
+                         identity); wrote fixture Sigstore bundle. Use --sign-mode real to \
+                         require real signing."
+                    );
+                    Ok(false)
+                }
             } else {
                 eprintln!(
                     "WARN cosign unavailable; emitting fixture Sigstore bundle. \
@@ -1696,6 +1705,24 @@ fn confirm_introspection_execution() -> Result<()> {
 /// See `aibom_signer::resolve_cosign_binary`.
 fn cosign_binary() -> Result<PathBuf> {
     aibom_signer::resolve_cosign_binary(std::env::var_os("REEVE_COSIGN_BIN"))
+}
+
+/// Conservative probe for a non-interactive OIDC token source that keyless
+/// (Sigstore) signing can use without opening a browser. Returns true only
+/// when a known ambient identity is present:
+/// - GitHub Actions OIDC (`ACTIONS_ID_TOKEN_REQUEST_URL` +
+///   `ACTIONS_ID_TOKEN_REQUEST_TOKEN`, both non-empty), or
+/// - an explicit token in `SIGSTORE_ID_TOKEN` or `COSIGN_IDENTITY_TOKEN`.
+///
+/// Unknown context is treated as unavailable so `--sign-mode auto` never
+/// invokes cosign interactively (raw error stack + multi-minute hang on
+/// laptops with cosign installed but no identity; issue #2). `--sign-mode
+/// real` is unaffected and still invokes cosign unconditionally.
+fn keyless_signing_context_available() -> bool {
+    let set = |name: &str| std::env::var(name).is_ok_and(|value| !value.is_empty());
+    (set("ACTIONS_ID_TOKEN_REQUEST_URL") && set("ACTIONS_ID_TOKEN_REQUEST_TOKEN"))
+        || set("SIGSTORE_ID_TOKEN")
+        || set("COSIGN_IDENTITY_TOKEN")
 }
 
 fn cosign_available() -> bool {

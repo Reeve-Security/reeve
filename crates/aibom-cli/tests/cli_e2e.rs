@@ -4907,6 +4907,122 @@ fn scan_skip_sign_overrides_reeve_sign_mode_env() {
     );
 }
 
+/// Write an executable stub cosign into `dir`. It exits 0 for the `version`
+/// probe and, for any other invocation (e.g. `attest-blob`), appends the args
+/// to `invocations.log` next to itself and exits 1. This lets tests assert
+/// exactly which cosign subcommands the CLI attempted.
+#[cfg(unix)]
+fn write_stub_cosign(dir: &Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let stub = dir.join("stub-cosign");
+    fs::write(
+        &stub,
+        "#!/bin/sh\n\
+         if [ \"$1\" = \"version\" ]; then exit 0; fi\n\
+         echo \"$@\" >> \"$(dirname \"$0\")/invocations.log\"\n\
+         exit 1\n",
+    )
+    .unwrap();
+    fs::set_permissions(&stub, fs::Permissions::from_mode(0o755)).unwrap();
+    stub
+}
+
+#[test]
+#[cfg(unix)]
+fn scan_sign_mode_auto_with_cosign_but_no_identity_falls_back_quietly() {
+    // Issue #2: on a laptop with cosign installed but no OIDC identity,
+    // --sign-mode auto must not invoke `cosign attest-blob` (which dumps a raw
+    // error stack and hangs). It must detect the missing keyless-signing
+    // context up front, warn, and fall back to the fixture bundle.
+    let bin_dir = TempDir::new().unwrap();
+    let stub = write_stub_cosign(bin_dir.path());
+    let out = TempDir::new().unwrap();
+    Command::cargo_bin("aibom-cli")
+        .unwrap()
+        .env("REEVE_COSIGN_BIN", &stub)
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_URL")
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+        .env_remove("SIGSTORE_ID_TOKEN")
+        .env_remove("COSIGN_IDENTITY_TOKEN")
+        .args([
+            "scan",
+            "--no-system-config",
+            "--target",
+            common::cli_scan_target_dir().to_str().unwrap(),
+            "--output-dir",
+            out.path().to_str().unwrap(),
+            "--sign-mode",
+            "auto",
+        ])
+        .assert()
+        .success()
+        .stderr(contains("no keyless signing identity"));
+
+    let (_, _, bundle) = common::find_triplet(out.path());
+    assert!(
+        bundle
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.ends_with(".sigstore.fixture.json")),
+        "expected fixture bundle when no keyless identity is present, got {bundle:?}"
+    );
+
+    // The stub must only ever have seen the `version` probe; no attest
+    // invocation may have been attempted.
+    let log = bin_dir.path().join("invocations.log");
+    if log.exists() {
+        let invocations = fs::read_to_string(&log).unwrap();
+        assert!(
+            !invocations.contains("attest"),
+            "cosign must not be invoked for signing without a keyless identity, \
+             got invocations: {invocations}"
+        );
+    }
+}
+
+#[test]
+#[cfg(unix)]
+fn scan_sign_mode_auto_with_identity_attempts_real_signing() {
+    // With an ambient keyless identity (SIGSTORE_ID_TOKEN), --sign-mode auto
+    // must attempt real signing. The stub cosign rejects attest-blob with
+    // exit 1, so the scan fails, proving the probe gates on the env and auto
+    // mode still reaches cosign when an identity exists.
+    let bin_dir = TempDir::new().unwrap();
+    let stub = write_stub_cosign(bin_dir.path());
+    let out = TempDir::new().unwrap();
+    Command::cargo_bin("aibom-cli")
+        .unwrap()
+        .env("REEVE_COSIGN_BIN", &stub)
+        .env("SIGSTORE_ID_TOKEN", "synthetic-test-token")
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_URL")
+        .env_remove("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
+        .env_remove("COSIGN_IDENTITY_TOKEN")
+        .args([
+            "scan",
+            "--no-system-config",
+            "--target",
+            common::cli_scan_target_dir().to_str().unwrap(),
+            "--output-dir",
+            out.path().to_str().unwrap(),
+            "--sign-mode",
+            "auto",
+        ])
+        .assert()
+        .failure();
+
+    let log = bin_dir.path().join("invocations.log");
+    assert!(
+        log.exists(),
+        "expected the stub cosign to record a signing invocation"
+    );
+    let invocations = fs::read_to_string(&log).unwrap();
+    assert!(
+        invocations.contains("attest-blob"),
+        "expected an attest-blob invocation with a keyless identity present, \
+         got invocations: {invocations}"
+    );
+}
+
 #[test]
 fn scan_with_policy_check_emits_policy_verdicts() {
     let out = TempDir::new().unwrap();
