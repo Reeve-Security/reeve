@@ -3024,6 +3024,70 @@ fn capability_ids(capabilities: &[Value]) -> BTreeSet<String> {
         .collect()
 }
 
+fn capability_scope_keys(capabilities: &[Value]) -> BTreeSet<String> {
+    capabilities
+        .iter()
+        .filter_map(capability_scope_key)
+        .collect()
+}
+
+fn capability_scope_key(capability: &Value) -> Option<String> {
+    let id = capability.get("id")?.as_str()?;
+    let qualifiers = capability
+        .get("qualifiers")
+        .map(canonical_json_key)
+        .unwrap_or_else(|| "{}".to_string());
+    Some(format!("{id}\u{1f}{qualifiers}"))
+}
+
+fn grant_record_ids_for_capabilities(
+    capabilities: &[Value],
+    evidence_kind_by_id: &BTreeMap<String, String>,
+) -> BTreeSet<String> {
+    capabilities
+        .iter()
+        .filter_map(|capability| capability.get("evidence").and_then(Value::as_array))
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter(|evidence_id| {
+            evidence_kind_by_id
+                .get(*evidence_id)
+                .is_some_and(|kind| kind == "granted-permission")
+        })
+        .map(str::to_string)
+        .collect()
+}
+
+fn canonical_json_key(value: &Value) -> String {
+    match value {
+        Value::Array(items) => format!(
+            "[{}]",
+            items
+                .iter()
+                .map(canonical_json_key)
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+        Value::Object(map) => {
+            let mut entries = map.iter().collect::<Vec<_>>();
+            entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+            format!(
+                "{{{}}}",
+                entries
+                    .into_iter()
+                    .map(|(key, value)| format!(
+                        "{}:{}",
+                        serde_json::to_string(key).unwrap_or_else(|_| "\"\"".to_string()),
+                        canonical_json_key(value)
+                    ))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            )
+        }
+        _ => serde_json::to_string(value).unwrap_or_else(|_| "null".to_string()),
+    }
+}
+
 /// Notable grants are facts worth surfacing in the rollup: wildcard
 /// subprocess approvals, broad filesystem paths, and egress domains.
 fn notable_grants(component_display: &str, granted: &[Value]) -> Vec<String> {
@@ -3250,6 +3314,8 @@ struct ProviderRollup {
     sources: BTreeSet<String>,
     declared: BTreeSet<String>,
     granted: BTreeSet<String>,
+    granted_scopes: BTreeSet<String>,
+    grant_records_raw: BTreeSet<String>,
     observed: BTreeSet<String>,
     granted_permission_count: usize,
     notable: Vec<String>,
@@ -3287,9 +3353,22 @@ fn build_machine_report(
             ))
         })
         .collect();
+    let evidence_kind_by_id: BTreeMap<String, String> = evidence
+        .iter()
+        .filter_map(|record| {
+            Some((
+                record.get("id")?.as_str()?.to_string(),
+                record.get("kind")?.as_str()?.to_string(),
+            ))
+        })
+        .collect();
 
     let mut report_components = Vec::new();
     let mut granted_permissions = Vec::new();
+    let mut granted_capability_placements = BTreeSet::new();
+    let mut granted_capability_scopes = BTreeSet::new();
+    let mut granted_capability_families = BTreeSet::new();
+    let mut grant_records_raw = BTreeSet::new();
     let mut declared_total = 0usize;
     let mut granted_total = 0usize;
     let mut observed_total = 0usize;
@@ -3316,6 +3395,18 @@ fn build_machine_report(
         declared_total += declared_summary.len();
         granted_total += granted_summary.len();
         observed_total += observed_summary.len();
+        let display_ref = strip_instance_fragments(bom_ref);
+        let surface = surface_for_component(component, bom_ref, &evidence_by_id);
+        let component_granted_scopes = capability_scope_keys(&granted);
+        let component_grant_records =
+            grant_record_ids_for_capabilities(&granted, &evidence_kind_by_id);
+        granted_capability_scopes.extend(component_granted_scopes.iter().cloned());
+        granted_capability_families.extend(capability_ids(&granted));
+        grant_records_raw.extend(component_grant_records.iter().cloned());
+        for scope in &component_granted_scopes {
+            granted_capability_placements
+                .insert(format!("{}\u{1f}{}\u{1f}{}", surface, display_ref, scope));
+        }
         for cap in &granted {
             granted_permissions.push(json!({
                 "component": bom_ref,
@@ -3333,7 +3424,6 @@ fn build_machine_report(
             "observed": observed_summary,
         }));
 
-        let display_ref = strip_instance_fragments(bom_ref);
         if !display_ref.starts_with("pkg:") {
             components_without_registry_identity += 1;
         } else if !display_ref
@@ -3348,12 +3438,17 @@ fn build_machine_report(
             // so a raw '@' in the final segment is exactly the version marker.
             packages_without_version += 1;
         }
-        let surface = surface_for_component(component, bom_ref, &evidence_by_id);
         let rollup = rollups.entry((surface, display_ref.clone())).or_default();
         rollup.instance_count += 1;
         rollup.sources.insert(source.to_string());
         rollup.declared.extend(capability_ids(&declared_summary));
         rollup.granted.extend(capability_ids(&granted_summary));
+        rollup
+            .granted_scopes
+            .extend(component_granted_scopes.into_iter());
+        rollup
+            .grant_records_raw
+            .extend(component_grant_records.into_iter());
         rollup.observed.extend(capability_ids(&observed_summary));
         rollup.granted_permission_count += granted.len();
         rollup
@@ -3382,6 +3477,18 @@ fn build_machine_report(
                 .iter()
                 .map(|(_, rollup)| rollup.granted_permission_count)
                 .sum();
+            let granted_scopes: BTreeSet<String> = providers
+                .iter()
+                .flat_map(|(_, rollup)| rollup.granted_scopes.iter().cloned())
+                .collect();
+            let granted_families: BTreeSet<String> = providers
+                .iter()
+                .flat_map(|(_, rollup)| rollup.granted.iter().cloned())
+                .collect();
+            let surface_grant_records_raw: BTreeSet<String> = providers
+                .iter()
+                .flat_map(|(_, rollup)| rollup.grant_records_raw.iter().cloned())
+                .collect();
             let mut notable: Vec<String> = providers
                 .iter()
                 .flat_map(|(_, rollup)| rollup.notable.iter().cloned())
@@ -3399,6 +3506,9 @@ fn build_machine_report(
                         "granted": rollup.granted.iter().collect::<Vec<_>>(),
                         "observed": rollup.observed.iter().collect::<Vec<_>>(),
                         "grantedPermissionCount": rollup.granted_permission_count,
+                        "grantedCapabilityScopesDistinct": rollup.granted_scopes.len(),
+                        "grantedCapabilityFamiliesDistinct": rollup.granted.len(),
+                        "grantRecordsRaw": rollup.grant_records_raw.len(),
                     })
                 })
                 .collect();
@@ -3408,11 +3518,18 @@ fn build_machine_report(
                 "componentCount": component_count,
                 "instanceCount": instance_count,
                 "grantedPermissionCount": granted_permission_count,
+                "grantedCapabilityScopesDistinct": granted_scopes.len(),
+                "grantedCapabilityFamiliesDistinct": granted_families.len(),
+                "grantRecordsRaw": surface_grant_records_raw.len(),
                 "notableGrants": notable,
                 "providers": provider_values,
             })
         })
         .collect();
+    let machine_instance_count: usize = surface_rollups
+        .iter()
+        .map(|rollup| rollup["instanceCount"].as_u64().unwrap_or(0) as usize)
+        .sum();
 
     let policy_findings = ranked_policy_findings(&policy_verdicts);
     // DENY/WARN totals count VERDICTS (facts), not aggregated display rows.
@@ -3462,8 +3579,13 @@ fn build_machine_report(
             .unwrap_or(Value::Null),
         "summary": {
             "components": components.len(),
+            "instanceCount": machine_instance_count,
             "declaredCapabilities": declared_total,
             "grantedPermissions": granted_total,
+            "grantedCapabilityPlacementsDistinct": granted_capability_placements.len(),
+            "grantedCapabilityScopesDistinct": granted_capability_scopes.len(),
+            "grantedCapabilityFamiliesDistinct": granted_capability_families.len(),
+            "grantRecordsRaw": grant_records_raw.len(),
             "observedCapabilities": observed_total,
             "evidenceRecords": evidence.len(),
             "policyVerdicts": policy_verdicts.len(),
@@ -3569,8 +3691,15 @@ fn render_report_html(report: &Value) -> String {
         ));
     }
     facts.push(format!(
-        "{} granted permissions",
-        summary["grantedPermissions"].as_u64().unwrap_or(0)
+        "{} distinct granted placements ({} raw grant records across {} instances)",
+        summary["grantedCapabilityPlacementsDistinct"]
+            .as_u64()
+            .unwrap_or(0),
+        summary["grantRecordsRaw"].as_u64().unwrap_or(0),
+        summary["instanceCount"]
+            .as_u64()
+            .or_else(|| summary["components"].as_u64())
+            .unwrap_or(0),
     ));
     facts.push(format!(
         "{} evidence records",
@@ -3701,11 +3830,15 @@ fn render_report_html(report: &Value) -> String {
     html.push_str("<h2 id=\"agent-surfaces\">Agent Surfaces</h2>");
     for rollup in report["surfaceRollups"].as_array().into_iter().flatten() {
         html.push_str(&format!(
-            "<h3>{}</h3><p class=\"meta\">{} components · {} instances · {} granted permissions</p>",
+            "<h3>{}</h3><p class=\"meta\">{} components · {} instances · {} distinct granted capability scopes ({} raw grant records across {} instances)</p>",
             display_text(rollup["label"].as_str().unwrap_or("unknown")),
             rollup["componentCount"].as_u64().unwrap_or(0),
             rollup["instanceCount"].as_u64().unwrap_or(0),
-            rollup["grantedPermissionCount"].as_u64().unwrap_or(0),
+            rollup["grantedCapabilityScopesDistinct"]
+                .as_u64()
+                .unwrap_or(0),
+            rollup["grantRecordsRaw"].as_u64().unwrap_or(0),
+            rollup["instanceCount"].as_u64().unwrap_or(0),
         ));
         let notable = rollup["notableGrants"]
             .as_array()
@@ -3718,12 +3851,16 @@ fn render_report_html(report: &Value) -> String {
             }
             html.push_str("</ul>");
         }
-        html.push_str("<table><thead><tr><th>Provider</th><th>Instances</th><th>Declared</th><th>Granted</th><th>Observed</th></tr></thead><tbody>");
+        html.push_str("<table><thead><tr><th>Provider</th><th>Instances</th><th>Granted scopes</th><th>Raw grant records</th><th>Declared</th><th>Granted</th><th>Observed</th></tr></thead><tbody>");
         for provider in rollup["providers"].as_array().into_iter().flatten() {
             html.push_str(&format!(
-                "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+                "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
                 display_text(provider["provider"].as_str().unwrap_or("unknown")),
                 provider["instanceCount"].as_u64().unwrap_or(0),
+                provider["grantedCapabilityScopesDistinct"]
+                    .as_u64()
+                    .unwrap_or(0),
+                provider["grantRecordsRaw"].as_u64().unwrap_or(0),
                 render_capability_id_list(&provider["declared"]),
                 render_capability_id_list(&provider["granted"]),
                 render_capability_id_list(&provider["observed"]),
@@ -3752,25 +3889,32 @@ fn render_report_html(report: &Value) -> String {
     }
     html.push_str("</tbody></table>");
 
-    html.push_str("<h3>Granted Permissions</h3><table><thead><tr><th>Component</th><th>Capability</th><th>Qualifiers</th><th>Evidence</th></tr></thead><tbody>");
+    html.push_str("<h3>Raw Grant Records</h3><table><thead><tr><th>Component</th><th>Capability</th><th>Qualifiers</th><th>Evidence</th></tr></thead><tbody>");
     for grant in report["grantedPermissions"]
         .as_array()
         .into_iter()
         .flatten()
     {
-        html.push_str(&format!(
-            "<tr><td>{}</td><td>{}</td><td><code>{}</code></td><td>{}</td></tr>",
-            display_text(
-                grant
-                    .get("componentDisplay")
-                    .or_else(|| grant.get("component"))
-                    .and_then(Value::as_str)
-                    .unwrap_or("unknown"),
-            ),
-            display_text(grant["id"].as_str().unwrap_or("unknown")),
-            display_text(&grant["qualifiers"].to_string()),
-            display_text(&grant["evidence"].to_string()),
-        ));
+        let evidence_ids = grant["evidence"]
+            .as_array()
+            .filter(|items| !items.is_empty())
+            .cloned()
+            .unwrap_or_else(|| vec![Value::String(String::new())]);
+        for evidence_id in evidence_ids {
+            html.push_str(&format!(
+                "<tr><td>{}</td><td>{}</td><td><code>{}</code></td><td>{}</td></tr>",
+                display_text(
+                    grant
+                        .get("componentDisplay")
+                        .or_else(|| grant.get("component"))
+                        .and_then(Value::as_str)
+                        .unwrap_or("unknown"),
+                ),
+                display_text(grant["id"].as_str().unwrap_or("unknown")),
+                display_text(&grant["qualifiers"].to_string()),
+                display_text(evidence_id.as_str().unwrap_or("")),
+            ));
+        }
     }
     html.push_str("</tbody></table>");
 
@@ -3862,8 +4006,11 @@ fn render_report_pdf(report: &Value) -> Vec<u8> {
             summary["declaredCapabilities"].as_u64().unwrap_or(0)
         ),
         format!(
-            "Granted permissions: {}",
-            summary["grantedPermissions"].as_u64().unwrap_or(0)
+            "Distinct granted placements: {} ({} raw grant records)",
+            summary["grantedCapabilityPlacementsDistinct"]
+                .as_u64()
+                .unwrap_or(0),
+            summary["grantRecordsRaw"].as_u64().unwrap_or(0)
         ),
         format!(
             "Observed capabilities: {}",
