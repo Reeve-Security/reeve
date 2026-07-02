@@ -2159,6 +2159,262 @@ fn report_components_dedupe_duplicate_capability_ids() {
     );
 }
 
+#[test]
+fn report_distinguishes_raw_grant_records_from_distinct_capabilities() {
+    let out = TempDir::new().unwrap();
+    let aibom = out.path().join("grant-counts.aibom.json");
+    let report = out.path().join("report.json");
+    write_json(&aibom, &report_grant_count_fixture_aibom());
+
+    Command::cargo_bin("aibom-cli")
+        .unwrap()
+        .args([
+            "report",
+            "--aibom",
+            aibom.to_str().unwrap(),
+            "--format",
+            "json",
+            "--output",
+            report.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+
+    let report_json = common::read_json(&report);
+    let summary = &report_json["summary"];
+    assert_eq!(summary["instanceCount"], 7);
+    assert_eq!(summary["grantRecordsRaw"], 8);
+    assert_eq!(summary["grantedCapabilityPlacementsDistinct"], 5);
+    assert_eq!(summary["grantedCapabilityScopesDistinct"], 4);
+    assert_eq!(summary["grantedCapabilityFamiliesDistinct"], 3);
+    assert!(summary.get("grantedPermissions").is_some());
+
+    let surfaces = report_json["surfaceRollups"].as_array().unwrap();
+    let surface_alpha = surfaces
+        .iter()
+        .find(|surface| surface["surface"] == "surface-alpha")
+        .expect("surface alpha rollup");
+    assert_eq!(surface_alpha["grantRecordsRaw"], 7);
+    assert_eq!(surface_alpha["grantedCapabilityScopesDistinct"], 4);
+    assert_eq!(surface_alpha["grantedCapabilityFamiliesDistinct"], 3);
+
+    let repeated_provider = surface_alpha["providers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|provider| provider["provider"] == "pkg:test/repeated-tool@1.0.0")
+        .expect("repeated provider rollup");
+    assert_eq!(repeated_provider["instanceCount"], 3);
+    assert_eq!(repeated_provider["grantRecordsRaw"], 3);
+    assert_eq!(repeated_provider["grantedCapabilityScopesDistinct"], 1);
+    assert_eq!(repeated_provider["grantedCapabilityFamiliesDistinct"], 1);
+
+    let merged_provider = surface_alpha["providers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|provider| provider["provider"] == "pkg:test/merged-evidence@1.0.0")
+        .expect("merged evidence provider rollup");
+    assert_eq!(merged_provider["grantRecordsRaw"], 2);
+    assert_eq!(merged_provider["grantedCapabilityScopesDistinct"], 1);
+    assert_eq!(merged_provider["grantedCapabilityFamiliesDistinct"], 1);
+
+    let surface_beta = surfaces
+        .iter()
+        .find(|surface| surface["surface"] == "surface-beta")
+        .expect("surface beta rollup");
+    assert_eq!(surface_beta["grantRecordsRaw"], 1);
+    assert_eq!(surface_beta["grantedCapabilityScopesDistinct"], 1);
+    assert_eq!(surface_beta["grantedCapabilityFamiliesDistinct"], 1);
+
+    let html_report = out.path().join("report.html");
+    Command::cargo_bin("aibom-cli")
+        .unwrap()
+        .args([
+            "report",
+            "--aibom",
+            aibom.to_str().unwrap(),
+            "--format",
+            "html",
+            "--output",
+            html_report.to_str().unwrap(),
+        ])
+        .assert()
+        .success();
+    let html = fs::read_to_string(&html_report).unwrap();
+    assert!(
+        html.contains("5 distinct granted placements (8 raw grant records across 7 instances)")
+    );
+    assert!(
+        html.contains(
+            "4 distinct granted capability scopes (7 raw grant records across 6 instances)"
+        )
+    );
+    assert!(html.contains("Raw Grant Records"));
+    assert!(html.contains("<th>Raw grant records</th>"));
+    assert!(!html.contains("granted permissions"));
+    assert!(!html.contains("Granted Permissions"));
+}
+
+fn report_grant_count_fixture_aibom() -> serde_json::Value {
+    json!({
+        "$schema": "https://aibom.example/schemas/aibom-v0.2.0.json",
+        "aibom": {
+            "canonicalization": "RFC8785-JCS+aibom-array-order-v0.1",
+            "components": [
+                {
+                    "bom-ref": "pkg:test/repeated-tool@1.0.0",
+                    "source": "built-in",
+                    "capabilities": {
+                        "declared": [],
+                        "observed": [],
+                        "granted": [{
+                            "evidence": ["ev-grant-001"],
+                            "id": "net:egress",
+                            "qualifiers": {"host": "api.example.test"},
+                            "source": "granted"
+                        }]
+                    }
+                },
+                {
+                    "bom-ref": "pkg:test/repeated-tool@1.0.0#instance-repeat-1",
+                    "source": "built-in",
+                    "capabilities": {
+                        "declared": [],
+                        "observed": [],
+                        "granted": [{
+                            "evidence": ["ev-grant-002"],
+                            "id": "net:egress",
+                            "qualifiers": {"host": "api.example.test"},
+                            "source": "granted"
+                        }]
+                    }
+                },
+                {
+                    "bom-ref": "pkg:test/repeated-tool@1.0.0#instance-repeat-2",
+                    "source": "built-in",
+                    "capabilities": {
+                        "declared": [],
+                        "observed": [],
+                        "granted": [{
+                            "evidence": ["ev-grant-003"],
+                            "id": "net:egress",
+                            "qualifiers": {"host": "api.example.test"},
+                            "source": "granted"
+                        }]
+                    }
+                },
+                {
+                    "bom-ref": "pkg:test/merged-evidence@1.0.0",
+                    "source": "built-in",
+                    "capabilities": {
+                        "declared": [],
+                        "observed": [],
+                        "granted": [{
+                            "evidence": ["ev-grant-004", "ev-grant-005"],
+                            "id": "fs:read",
+                            "qualifiers": {"path": "/tmp/synthetic-demo"},
+                            "source": "granted"
+                        }]
+                    }
+                },
+                {
+                    "bom-ref": "pkg:test/qualifier-demo@1.0.0",
+                    "source": "built-in",
+                    "capabilities": {
+                        "declared": [],
+                        "observed": [],
+                        "granted": [{
+                            "evidence": ["ev-grant-006"],
+                            "id": "exec:subprocess",
+                            "qualifiers": {"command": "tool-a"},
+                            "source": "granted"
+                        }]
+                    }
+                },
+                {
+                    "bom-ref": "pkg:test/qualifier-demo@1.0.0#instance-qualifier-2",
+                    "source": "built-in",
+                    "capabilities": {
+                        "declared": [],
+                        "observed": [],
+                        "granted": [{
+                            "evidence": ["ev-grant-007"],
+                            "id": "exec:subprocess",
+                            "qualifiers": {"command": "tool-b"},
+                            "source": "granted"
+                        }]
+                    }
+                },
+                {
+                    "bom-ref": "pkg:test/repeated-tool@1.0.0#instance-surface-beta",
+                    "source": "built-in",
+                    "capabilities": {
+                        "declared": [],
+                        "observed": [],
+                        "granted": [{
+                            "evidence": ["ev-grant-008"],
+                            "id": "net:egress",
+                            "qualifiers": {"host": "api.example.test"},
+                            "source": "granted"
+                        }]
+                    }
+                }
+            ],
+            "evidence": [
+                {
+                    "id": "ev-grant-001",
+                    "kind": "granted-permission",
+                    "reference": "mcp://surface-alpha/repeated-tool/grants/1"
+                },
+                {
+                    "id": "ev-grant-002",
+                    "kind": "granted-permission",
+                    "reference": "mcp://surface-alpha/repeated-tool/grants/2"
+                },
+                {
+                    "id": "ev-grant-003",
+                    "kind": "granted-permission",
+                    "reference": "mcp://surface-alpha/repeated-tool/grants/3"
+                },
+                {
+                    "id": "ev-grant-004",
+                    "kind": "granted-permission",
+                    "reference": "mcp://surface-alpha/merged-evidence/grants/1"
+                },
+                {
+                    "id": "ev-grant-005",
+                    "kind": "granted-permission",
+                    "reference": "mcp://surface-alpha/merged-evidence/grants/2"
+                },
+                {
+                    "id": "ev-grant-006",
+                    "kind": "granted-permission",
+                    "reference": "mcp://surface-alpha/qualifier-demo/grants/1"
+                },
+                {
+                    "id": "ev-grant-007",
+                    "kind": "granted-permission",
+                    "reference": "mcp://surface-alpha/qualifier-demo/grants/2"
+                },
+                {
+                    "id": "ev-grant-008",
+                    "kind": "granted-permission",
+                    "reference": "mcp://surface-beta/repeated-tool/grants/1"
+                }
+            ],
+            "scan": {
+                "adapter": {"name": "mcp", "version": EXPECTED_VERSION},
+                "scanId": "grant-count-fixture",
+                "scanner": {"name": "reeve", "version": EXPECTED_VERSION},
+                "target": {"description": "synthetic endpoint", "kind": "filesystem"},
+                "timestamp": "2026-07-01T00:00:00Z"
+            },
+            "schemaVersion": "0.2.0"
+        }
+    })
+}
+
 fn report_472_fixture_aibom() -> serde_json::Value {
     json!({
         "$schema": "https://aibom.example/schemas/aibom-v0.2.0.json",
