@@ -2250,6 +2250,11 @@ fn report_distinguishes_raw_grant_records_from_distinct_capabilities() {
             "4 distinct granted capability scopes (7 raw grant records across 6 instances)"
         )
     );
+    // Singular path: surface-beta carries exactly one of everything, so the
+    // rollup meta line must never render "1 records" / "1 instances".
+    assert!(html.contains(
+        "1 component · 1 instance · 1 distinct granted capability scope (1 raw grant record across 1 instance)"
+    ));
     assert!(html.contains("Raw Grant Records"));
     assert!(html.contains("<th>Raw grant records</th>"));
     assert!(!html.contains("granted permissions"));

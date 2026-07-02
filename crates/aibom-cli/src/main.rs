@@ -3660,6 +3660,16 @@ fn display_text(value: &str) -> String {
     html_escape(&strip_instance_fragments(value))
 }
 
+/// "1 instance" / "2 instances": simple s-append pluralization for report
+/// count+noun pairs so a count of 1 never renders a plural noun.
+fn count_noun(n: u64, singular: &str) -> String {
+    if n == 1 {
+        format!("{n} {singular}")
+    } else {
+        format!("{n} {singular}s")
+    }
+}
+
 fn render_report_html(report: &Value) -> String {
     let summary = &report["summary"];
     let scan = &report["scan"];
@@ -3714,15 +3724,24 @@ fn render_report_html(report: &Value) -> String {
         ));
     }
     facts.push(format!(
-        "{} distinct granted placements ({} raw grant records across {} instances)",
-        summary["grantedCapabilityPlacementsDistinct"]
-            .as_u64()
-            .unwrap_or(0),
-        summary["grantRecordsRaw"].as_u64().unwrap_or(0),
-        summary["instanceCount"]
-            .as_u64()
-            .or_else(|| summary["components"].as_u64())
-            .unwrap_or(0),
+        "{} ({} across {})",
+        count_noun(
+            summary["grantedCapabilityPlacementsDistinct"]
+                .as_u64()
+                .unwrap_or(0),
+            "distinct granted placement",
+        ),
+        count_noun(
+            summary["grantRecordsRaw"].as_u64().unwrap_or(0),
+            "raw grant record",
+        ),
+        count_noun(
+            summary["instanceCount"]
+                .as_u64()
+                .or_else(|| summary["components"].as_u64())
+                .unwrap_or(0),
+            "instance",
+        ),
     ));
     facts.push(format!(
         "{} evidence records",
@@ -3853,15 +3872,21 @@ fn render_report_html(report: &Value) -> String {
     html.push_str("<h2 id=\"agent-surfaces\">Agent Surfaces</h2>");
     for rollup in report["surfaceRollups"].as_array().into_iter().flatten() {
         html.push_str(&format!(
-            "<h3>{}</h3><p class=\"meta\">{} components · {} instances · {} distinct granted capability scopes ({} raw grant records across {} instances)</p>",
+            "<h3>{}</h3><p class=\"meta\">{} · {} · {} ({} across {})</p>",
             display_text(rollup["label"].as_str().unwrap_or("unknown")),
-            rollup["componentCount"].as_u64().unwrap_or(0),
-            rollup["instanceCount"].as_u64().unwrap_or(0),
-            rollup["grantedCapabilityScopesDistinct"]
-                .as_u64()
-                .unwrap_or(0),
-            rollup["grantRecordsRaw"].as_u64().unwrap_or(0),
-            rollup["instanceCount"].as_u64().unwrap_or(0),
+            count_noun(rollup["componentCount"].as_u64().unwrap_or(0), "component"),
+            count_noun(rollup["instanceCount"].as_u64().unwrap_or(0), "instance"),
+            count_noun(
+                rollup["grantedCapabilityScopesDistinct"]
+                    .as_u64()
+                    .unwrap_or(0),
+                "distinct granted capability scope",
+            ),
+            count_noun(
+                rollup["grantRecordsRaw"].as_u64().unwrap_or(0),
+                "raw grant record",
+            ),
+            count_noun(rollup["instanceCount"].as_u64().unwrap_or(0), "instance"),
         ));
         let notable = rollup["notableGrants"]
             .as_array()
@@ -4029,11 +4054,14 @@ fn render_report_pdf(report: &Value) -> Vec<u8> {
             summary["declaredCapabilities"].as_u64().unwrap_or(0)
         ),
         format!(
-            "Distinct granted placements: {} ({} raw grant records)",
+            "Distinct granted placements: {} ({})",
             summary["grantedCapabilityPlacementsDistinct"]
                 .as_u64()
                 .unwrap_or(0),
-            summary["grantRecordsRaw"].as_u64().unwrap_or(0)
+            count_noun(
+                summary["grantRecordsRaw"].as_u64().unwrap_or(0),
+                "raw grant record",
+            )
         ),
         format!(
             "Observed capabilities: {}",
