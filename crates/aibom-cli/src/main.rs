@@ -3070,7 +3070,7 @@ fn canonical_json_key(value: &Value) -> String {
         ),
         Value::Object(map) => {
             let mut entries = map.iter().collect::<Vec<_>>();
-            entries.sort_by(|(left, _), (right, _)| left.cmp(right));
+            entries.sort_by_key(|(left, _)| *left);
             format!(
                 "{{{}}}",
                 entries
@@ -3443,12 +3443,8 @@ fn build_machine_report(
         rollup.sources.insert(source.to_string());
         rollup.declared.extend(capability_ids(&declared_summary));
         rollup.granted.extend(capability_ids(&granted_summary));
-        rollup
-            .granted_scopes
-            .extend(component_granted_scopes.into_iter());
-        rollup
-            .grant_records_raw
-            .extend(component_grant_records.into_iter());
+        rollup.granted_scopes.extend(component_granted_scopes);
+        rollup.grant_records_raw.extend(component_grant_records);
         rollup.observed.extend(capability_ids(&observed_summary));
         rollup.granted_permission_count += granted.len();
         rollup
