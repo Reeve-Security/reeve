@@ -1601,7 +1601,16 @@ fn resolve_sign_requested(mode: SignMode) -> Result<bool> {
         SignMode::Fixture => Ok(false),
         SignMode::Auto => {
             if cosign_available() {
-                Ok(true)
+                if keyless_signing_context_available() {
+                    Ok(true)
+                } else {
+                    eprintln!(
+                        "WARN real signing unavailable (cosign present, no keyless signing \
+                         identity); wrote fixture Sigstore bundle. Use --sign-mode real to \
+                         require real signing."
+                    );
+                    Ok(false)
+                }
             } else {
                 eprintln!(
                     "WARN cosign unavailable; emitting fixture Sigstore bundle. \
@@ -1696,6 +1705,24 @@ fn confirm_introspection_execution() -> Result<()> {
 /// See `aibom_signer::resolve_cosign_binary`.
 fn cosign_binary() -> Result<PathBuf> {
     aibom_signer::resolve_cosign_binary(std::env::var_os("REEVE_COSIGN_BIN"))
+}
+
+/// Conservative probe for a non-interactive OIDC token source that keyless
+/// (Sigstore) signing can use without opening a browser. Returns true only
+/// when a known ambient identity is present:
+/// - GitHub Actions OIDC (`ACTIONS_ID_TOKEN_REQUEST_URL` +
+///   `ACTIONS_ID_TOKEN_REQUEST_TOKEN`, both non-empty), or
+/// - an explicit token in `SIGSTORE_ID_TOKEN` or `COSIGN_IDENTITY_TOKEN`.
+///
+/// Unknown context is treated as unavailable so `--sign-mode auto` never
+/// invokes cosign interactively (raw error stack + multi-minute hang on
+/// laptops with cosign installed but no identity; issue #2). `--sign-mode
+/// real` is unaffected and still invokes cosign unconditionally.
+fn keyless_signing_context_available() -> bool {
+    let set = |name: &str| std::env::var(name).is_ok_and(|value| !value.is_empty());
+    (set("ACTIONS_ID_TOKEN_REQUEST_URL") && set("ACTIONS_ID_TOKEN_REQUEST_TOKEN"))
+        || set("SIGSTORE_ID_TOKEN")
+        || set("COSIGN_IDENTITY_TOKEN")
 }
 
 fn cosign_available() -> bool {
@@ -3633,6 +3660,16 @@ fn display_text(value: &str) -> String {
     html_escape(&strip_instance_fragments(value))
 }
 
+/// "1 instance" / "2 instances": simple s-append pluralization for report
+/// count+noun pairs so a count of 1 never renders a plural noun.
+fn count_noun(n: u64, singular: &str) -> String {
+    if n == 1 {
+        format!("{n} {singular}")
+    } else {
+        format!("{n} {singular}s")
+    }
+}
+
 fn render_report_html(report: &Value) -> String {
     let summary = &report["summary"];
     let scan = &report["scan"];
@@ -3687,15 +3724,24 @@ fn render_report_html(report: &Value) -> String {
         ));
     }
     facts.push(format!(
-        "{} distinct granted placements ({} raw grant records across {} instances)",
-        summary["grantedCapabilityPlacementsDistinct"]
-            .as_u64()
-            .unwrap_or(0),
-        summary["grantRecordsRaw"].as_u64().unwrap_or(0),
-        summary["instanceCount"]
-            .as_u64()
-            .or_else(|| summary["components"].as_u64())
-            .unwrap_or(0),
+        "{} ({} across {})",
+        count_noun(
+            summary["grantedCapabilityPlacementsDistinct"]
+                .as_u64()
+                .unwrap_or(0),
+            "distinct granted placement",
+        ),
+        count_noun(
+            summary["grantRecordsRaw"].as_u64().unwrap_or(0),
+            "raw grant record",
+        ),
+        count_noun(
+            summary["instanceCount"]
+                .as_u64()
+                .or_else(|| summary["components"].as_u64())
+                .unwrap_or(0),
+            "instance",
+        ),
     ));
     facts.push(format!(
         "{} evidence records",
@@ -3826,15 +3872,21 @@ fn render_report_html(report: &Value) -> String {
     html.push_str("<h2 id=\"agent-surfaces\">Agent Surfaces</h2>");
     for rollup in report["surfaceRollups"].as_array().into_iter().flatten() {
         html.push_str(&format!(
-            "<h3>{}</h3><p class=\"meta\">{} components · {} instances · {} distinct granted capability scopes ({} raw grant records across {} instances)</p>",
+            "<h3>{}</h3><p class=\"meta\">{} · {} · {} ({} across {})</p>",
             display_text(rollup["label"].as_str().unwrap_or("unknown")),
-            rollup["componentCount"].as_u64().unwrap_or(0),
-            rollup["instanceCount"].as_u64().unwrap_or(0),
-            rollup["grantedCapabilityScopesDistinct"]
-                .as_u64()
-                .unwrap_or(0),
-            rollup["grantRecordsRaw"].as_u64().unwrap_or(0),
-            rollup["instanceCount"].as_u64().unwrap_or(0),
+            count_noun(rollup["componentCount"].as_u64().unwrap_or(0), "component"),
+            count_noun(rollup["instanceCount"].as_u64().unwrap_or(0), "instance"),
+            count_noun(
+                rollup["grantedCapabilityScopesDistinct"]
+                    .as_u64()
+                    .unwrap_or(0),
+                "distinct granted capability scope",
+            ),
+            count_noun(
+                rollup["grantRecordsRaw"].as_u64().unwrap_or(0),
+                "raw grant record",
+            ),
+            count_noun(rollup["instanceCount"].as_u64().unwrap_or(0), "instance"),
         ));
         let notable = rollup["notableGrants"]
             .as_array()
@@ -4002,11 +4054,14 @@ fn render_report_pdf(report: &Value) -> Vec<u8> {
             summary["declaredCapabilities"].as_u64().unwrap_or(0)
         ),
         format!(
-            "Distinct granted placements: {} ({} raw grant records)",
+            "Distinct granted placements: {} ({})",
             summary["grantedCapabilityPlacementsDistinct"]
                 .as_u64()
                 .unwrap_or(0),
-            summary["grantRecordsRaw"].as_u64().unwrap_or(0)
+            count_noun(
+                summary["grantRecordsRaw"].as_u64().unwrap_or(0),
+                "raw grant record",
+            )
         ),
         format!(
             "Observed capabilities: {}",

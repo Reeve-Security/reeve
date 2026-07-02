@@ -43,6 +43,21 @@ keeps CI from drifting off it). If you want to reproduce the secret scan locally
 install that exact version (a newer or older gitleaks can change allowlist semantics
 and fingerprints, so matching the pinned version is what makes a local run trustworthy).
 
+Approved low-risk hygiene issues may be batched into a single PR when each item is
+independently low risk, the batch is owner approved, and the combined diff passes the
+full merge gate. Batching is a bounded exception, not the default.
+
+Path or label gating of `check (macos)` and `windows release smoke` was considered and
+declined: they are part of the fixed required-check set in `scripts/merge-gate.sh` and
+`scripts/release-gate.sh`, conditional gating would break the required-check contract
+or silently drop coverage, and docs-only and draft-PR skips already exist.
+
+The Rust toolchain is pinned in `rust-toolchain.toml` and enforced by
+`scripts/check-toolchain-contract.py`; bump the pin deliberately, not by drift.
+
+The strict Windows ETW positive-control is a manual release-e2e step on a real Windows
+box: `REEVE_WINDOWS_ETW_STRICT=1 cargo test -p aibom-scanner windows_positive_control_requires_concrete_observed_events`.
+
 ### Security advisory forks
 
 GitHub's temporary private advisory forks do not run Actions, so a fix worked in a

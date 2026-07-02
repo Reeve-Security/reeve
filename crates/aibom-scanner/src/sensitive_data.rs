@@ -3270,28 +3270,118 @@ enabled = true
         fs::write(path, content).unwrap();
     }
 
-    // Provider-shaped test fixtures are assembled from split fragments so no
-    // contiguous provider-looking literal sits in source (#33). Each builder
-    // returns bytes identical to the prior literal, so detection/redaction
-    // assertions that reference these values are unchanged.
+    // Provider-shaped test fixtures keep each real provider PREFIX (assembled
+    // from split fragments so no contiguous provider-looking literal sits in
+    // source, #33) but their secret BODIES are machine-generated
+    // deterministically by a fixed-constant LCG seeded from a per-fixture
+    // label, so the fixtures are provably synthetic: no hand-picked
+    // secret-looking fragment exists anywhere in the tree (#41). The bodies
+    // are stable across runs; `synth_fixture_bodies_are_detector_shaped`
+    // pins that every generated value still passes the production detector
+    // gates.
+    const UPPER_ALNUM: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const MIXED_ALNUM: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+    fn synth_secret_body(label: &str, len: usize, charset: &[u8]) -> String {
+        let mut state = label.bytes().fold(0u64, |acc, byte| {
+            acc.wrapping_mul(31).wrapping_add(u64::from(byte))
+        });
+        (0..len)
+            .map(|_| {
+                state = state
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                charset[(state >> 33) as usize % charset.len()] as char
+            })
+            .collect()
+    }
+
     fn fixture_aws_access_key() -> String {
-        format!("AKIA{}", "7Q4M2Z9X8C5N1P3R")
+        format!(
+            "AKIA{}",
+            synth_secret_body("aws-access-key", 16, UPPER_ALNUM)
+        )
     }
 
     fn fixture_anthropic_key() -> String {
-        format!("sk-{}-{}", "ant", "api03-vB7qL9mR2xT6pW4zY8nC0dE5fG1h")
+        format!(
+            "sk-{}-api03-{}",
+            "ant",
+            synth_secret_body("anthropic-key", 28, MIXED_ALNUM)
+        )
     }
 
     fn fixture_openai_key() -> String {
-        format!("sk-{}-{}", "proj", "vB7qL9mR2xT6pW4zY8nC0dE5fG1h")
+        format!(
+            "sk-{}-{}",
+            "proj",
+            synth_secret_body("openai-key", 28, MIXED_ALNUM)
+        )
     }
 
     fn fixture_stripe_key() -> String {
-        format!("sk_{}_{}", "live", "vB7qL9mR2xT6pW4zY8nC0dE5fG1h")
+        format!(
+            "sk_{}_{}",
+            "live",
+            synth_secret_body("stripe-key", 28, MIXED_ALNUM)
+        )
     }
 
     fn fixture_oauth_client_secret() -> String {
-        "Q7mZ9pL2xT6vN4cR8sU0wY3aB5dE1fG9".to_string()
+        synth_secret_body("oauth-client-secret", 32, MIXED_ALNUM)
+    }
+
+    #[test]
+    fn synth_fixture_bodies_are_detector_shaped() {
+        // The generated bodies are deterministic (fixed LCG constants, fixed
+        // labels), so this proves once and forever that every synthetic
+        // fixture passes the production detector gates: prefix + length
+        // shape, plausible body (>=8 alnum chars, entropy floor, no
+        // placeholder markers, no low-entropy runs) (#41).
+        let aws = fixture_aws_access_key();
+        assert!(aws.starts_with("AKIA"), "aws fixture prefix: {aws}");
+        assert_eq!(aws.len(), 20, "aws fixture must be exactly 20 chars");
+        assert!(is_aws_access_key(&aws), "aws fixture must fire detector");
+
+        let anthropic = fixture_anthropic_key();
+        assert!(
+            anthropic.starts_with("sk-ant-api03-"),
+            "anthropic fixture prefix: {anthropic}"
+        );
+        assert!(anthropic.len() >= 24, "anthropic fixture length");
+        assert!(
+            is_anthropic_key(&anthropic),
+            "anthropic fixture must fire detector"
+        );
+
+        let openai = fixture_openai_key();
+        assert!(
+            openai.starts_with("sk-proj-"),
+            "openai fixture prefix: {openai}"
+        );
+        assert!(openai.len() >= 24, "openai fixture length");
+        assert!(is_openai_key(&openai), "openai fixture must fire detector");
+
+        let stripe = fixture_stripe_key();
+        assert!(
+            stripe.starts_with("sk_live_"),
+            "stripe fixture prefix: {stripe}"
+        );
+        assert!(stripe.len() >= 24, "stripe fixture length");
+        assert!(is_stripe_key(&stripe), "stripe fixture must fire detector");
+
+        let oauth = fixture_oauth_client_secret();
+        assert_eq!(oauth.len(), 32, "oauth fixture length");
+        assert!(
+            oauth.chars().all(|ch| ch.is_ascii_alphanumeric()),
+            "oauth fixture is alnum: {oauth}"
+        );
+        assert!(!is_placeholder_secret_token(&oauth));
+        assert!(!has_low_secret_entropy(&oauth));
+        assert!(
+            has_plausible_secret_body(&oauth, &[]),
+            "oauth fixture must pass plausibility gates"
+        );
     }
 
     // PEM private-key fixtures assembled from split fragments so no full PEM

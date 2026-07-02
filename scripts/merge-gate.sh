@@ -97,6 +97,9 @@ python3 scripts/check-no-raw-provider-secrets.py || fail "raw provider-secret li
 step "gitleaks version pinned in one place (CI cannot drift)"
 python3 scripts/check-gitleaks-pinning.py || fail "gitleaks version pinning (#35)"
 
+step "rust toolchain pinned in one place (workflows cannot drift)"
+python3 scripts/check-toolchain-contract.py || fail "rust toolchain pinning (#38)"
+
 step "docs-only paths-ignore helper self-test"
 python3 scripts/pr-docs-only.py --self-test || fail "pr-docs-only self-test (helper / ci.yml paths-ignore drift)"
 
@@ -108,6 +111,9 @@ python3 scripts/check-no-raw-provider-secrets.py --self-test || fail "check-no-r
 
 step "gitleaks-pinning helper self-test"
 python3 scripts/check-gitleaks-pinning.py --self-test || fail "check-gitleaks-pinning self-test (#35)"
+
+step "toolchain-contract helper self-test"
+python3 scripts/check-toolchain-contract.py --self-test || fail "check-toolchain-contract self-test (#38)"
 
 step "release sensitive-data flags contract"
 artifacts_dir="$(mktemp -d)"

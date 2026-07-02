@@ -14,13 +14,17 @@
 # title/body based on your changelogs.
 
 name: Release
-# This file is cargo-dist generated. Two local hardenings are applied on top of
-# the generated output and MUST survive regeneration:
+# This file is cargo-dist generated. Three local hardenings are applied on top
+# of the generated output and MUST survive regeneration:
 #   1. top-level permissions are narrowed to contents: read (the host job keeps
-#      its own contents: write + id-token: write at job level), and
-#   2. every third-party action is pinned to a full commit SHA.
-# scripts/check-workflow-pinning.py guards both against cargo-dist regeneration
-# drift; if you re-run `dist generate`, re-apply these and keep that check green.
+#      its own contents: write + id-token: write at job level),
+#   2. every third-party action is pinned to a full commit SHA, and
+#   3. the Rust toolchain is pinned to the exact version in rust-toolchain.toml
+#      (dtolnay/rust-toolchain gets an explicit `toolchain:` input; the container
+#      rustup path relies on rustup honoring rust-toolchain.toml, see below).
+# scripts/check-workflow-pinning.py guards 1 and 2, and
+# scripts/check-toolchain-contract.py guards 3, against cargo-dist regeneration
+# drift; if you re-run `dist generate`, re-apply these and keep those checks green.
 permissions:
   "contents": "read"
 
@@ -129,8 +133,17 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable (pinned 2026-03-27)
+      # Toolchain version comes from rust-toolchain.toml (single pin, #38);
+      # scripts/check-toolchain-contract.py fails CI if this drifts from it.
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # action pinned 2026-03-27
         if: ${{ !matrix.container }}
+        with:
+          toolchain: 1.92.0
+      # Generated cargo-dist container path: it installs rustup with no version
+      # named on purpose. rustup's cargo shim reads rust-toolchain.toml in the
+      # repo working directory, so every cargo/dist invocation below resolves to
+      # the pinned toolchain automatically; no version literal is added here so
+      # the generated block stays byte-stable across `dist generate` reruns.
       - name: Install Rust non-interactively if not already installed
         if: ${{ matrix.container }}
         run: |

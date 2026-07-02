@@ -1,0 +1,8 @@
+# Single source of truth for the Rust toolchain (#38). rustup and the
+# dtolnay/rust-toolchain CI steps must all resolve to this exact version;
+# scripts/check-toolchain-contract.py enforces the agreement. Bump this pin
+# deliberately (and let CI prove the bump), never by letting CI float on
+# a rolling "stable".
+[toolchain]
+channel = "1.92.0"
+components = ["rustfmt", "clippy"]
