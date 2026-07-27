@@ -522,6 +522,7 @@ fn validate_hash_match(
         return Ok(());
     };
     let expected = sha256_hex(aibom_bytes);
+    let mut found_matching_reference = false;
     for (component_index, component) in cdx_components(cdx).enumerate() {
         let Some(refs) = component
             .pointer("/externalReferences")
@@ -536,11 +537,20 @@ fn validate_hash_match(
             {
                 continue;
             }
+            found_matching_reference = true;
+            let hashes_pointer =
+                format!("/components/{component_index}/externalReferences/{ref_index}/hashes");
             let Some(hashes) = reference.pointer("/hashes").and_then(Value::as_array) else {
-                continue;
+                return Err(failure(
+                    ValidationStage::HashMatch,
+                    ErrorCode::CdxExternalReferencesHashMissing,
+                    hashes_pointer,
+                ));
             };
+            let mut found_sha256 = false;
             for (hash_index, hash) in hashes.iter().enumerate() {
                 if hash.pointer("/alg").and_then(Value::as_str) == Some("SHA-256") {
+                    found_sha256 = true;
                     let actual = hash
                         .pointer("/content")
                         .and_then(Value::as_str)
@@ -554,10 +564,19 @@ fn validate_hash_match(
                             ),
                         ));
                     }
-                    return Ok(());
                 }
             }
+            if !found_sha256 {
+                return Err(failure(
+                    ValidationStage::HashMatch,
+                    ErrorCode::CdxExternalReferencesHashMissing,
+                    hashes_pointer,
+                ));
+            }
         }
+    }
+    if found_matching_reference {
+        return Ok(());
     }
     Ok(())
 }
@@ -961,6 +980,8 @@ fn harness_failure(message: impl Into<String>) -> ValidationFailure {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+    use std::path::Path;
     use std::path::PathBuf;
 
     #[test]
@@ -975,7 +996,7 @@ mod tests {
             .filter(|outcome| !matches!(outcome.result, FixtureResult::Passed))
             .collect();
         assert!(failures.is_empty(), "fixture failures: {failures:#?}");
-        assert_eq!(outcomes.len(), 44);
+        assert_eq!(outcomes.len(), 45);
     }
 
     #[test]
@@ -1012,5 +1033,60 @@ mod tests {
             "v0.3.0 fixture failures: {failures:#?}"
         );
         assert_eq!(outcomes.len(), 3);
+    }
+
+    #[test]
+    fn matching_bom_reference_requires_hashes_array() {
+        let cdx = json!({
+            "components": [{
+                "externalReferences": [{
+                    "type": "bom",
+                    "url": "fixture-42.aibom.json"
+                }]
+            }]
+        });
+
+        let err = validate_hash_match(Some(&cdx), Path::new("fixture-42.aibom.json"), br#"{}"#)
+            .unwrap_err();
+
+        assert_eq!(err.stage, ValidationStage::HashMatch);
+        assert_eq!(err.code, ErrorCode::CdxExternalReferencesHashMissing);
+        assert_eq!(err.pointer, "/components/0/externalReferences/0/hashes");
+    }
+
+    #[test]
+    fn every_matching_bom_reference_requires_sha256_entry() {
+        let expected = sha256_hex(br#"{}"#);
+        let cdx = json!({
+            "components": [
+                {
+                    "externalReferences": [{
+                        "type": "bom",
+                        "url": "fixture-42.aibom.json",
+                        "hashes": [{
+                            "alg": "SHA-256",
+                            "content": expected
+                        }]
+                    }]
+                },
+                {
+                    "externalReferences": [{
+                        "type": "bom",
+                        "url": "fixture-42.aibom.json",
+                        "hashes": [{
+                            "alg": "SHA-512",
+                            "content": "deadbeef"
+                        }]
+                    }]
+                }
+            ]
+        });
+
+        let err = validate_hash_match(Some(&cdx), Path::new("fixture-42.aibom.json"), br#"{}"#)
+            .unwrap_err();
+
+        assert_eq!(err.stage, ValidationStage::HashMatch);
+        assert_eq!(err.code, ErrorCode::CdxExternalReferencesHashMissing);
+        assert_eq!(err.pointer, "/components/1/externalReferences/0/hashes");
     }
 }
