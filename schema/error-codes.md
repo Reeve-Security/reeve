@@ -70,6 +70,7 @@ Emitted when cross-file hash references disagree with computed hashes.
 
 | Code | Meaning |
 |---|---|
+| `cdx.externalReferences.hash_missing` | A CycloneDX `type: bom` external reference that resolves to the distributed AIBOM sidecar omits the `hashes` array entirely, or provides no `SHA-256` entry. Every matching sidecar reference must carry a sha256 binding. |
 | `cdx.externalReferences.hash_mismatch` | A CycloneDX `externalReferences[].hashes[].content` value does not equal the computed sha256 of the canonical bytes of the referenced AIBOM sidecar. |
 
 ### Stage: `attestation-shape`

@@ -84,6 +84,8 @@ pub enum ErrorCode {
     CdxExternalReferencesUrlMismatch,
     #[serde(rename = "canonicalization.byte_drift")]
     CanonicalizationByteDrift,
+    #[serde(rename = "cdx.externalReferences.hash_missing")]
+    CdxExternalReferencesHashMissing,
     #[serde(rename = "cdx.externalReferences.hash_mismatch")]
     CdxExternalReferencesHashMismatch,
     #[serde(rename = "attestation.payloadType_mismatch")]
@@ -147,6 +149,7 @@ impl ErrorCode {
             Self::AibomComponentBomRefMissingInCdx => "aibom.component.bom_ref_missing_in_cdx",
             Self::CdxExternalReferencesUrlMismatch => "cdx.externalReferences.url_mismatch",
             Self::CanonicalizationByteDrift => "canonicalization.byte_drift",
+            Self::CdxExternalReferencesHashMissing => "cdx.externalReferences.hash_missing",
             Self::CdxExternalReferencesHashMismatch => "cdx.externalReferences.hash_mismatch",
             Self::AttestationPayloadTypeMismatch => "attestation.payloadType_mismatch",
             Self::AttestationStatementTypeMismatch => "attestation.statement_type_mismatch",

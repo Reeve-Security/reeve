@@ -1,0 +1,11 @@
+{
+  "name": "42-invalid-cdx-sidecar-missing-hash",
+  "kind": "negative",
+  "expected": "verify-reject",
+  "rejectStage": "hash-match",
+  "expectedErrorCode": "cdx.externalReferences.hash_missing",
+  "rejectPointer": "/components/0/externalReferences/0/hashes",
+  "invariants": ["Q1.b", "Q3.h"],
+  "description": "CycloneDX document references the distributed AIBOM sidecar by filename and provides hashes, but none of them use SHA-256. Verifier rejects at hash-match stage because every matching sidecar reference must carry a SHA-256 binding.",
+  "notes": "This fixture exercises the no-SHA-256 branch separately from the stale-value branch covered by fixture 17. The AIBOM sidecar bytes are otherwise valid and canonical; the failure is solely that the matching type:bom external reference carries only a SHA-512 digest, so the verifier never gets the required SHA-256 binding to the canonical sidecar bytes."
+}
