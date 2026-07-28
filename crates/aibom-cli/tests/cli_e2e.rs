@@ -817,6 +817,26 @@ fn verify_bundle_structure_help_distinguishes_structural_from_cosign_proof() {
         .stdout(contains("--verify-bundle-structure"));
 }
 
+#[test]
+fn fleet_help_describes_current_signing_boundary() {
+    Command::cargo_bin("aibom-cli")
+        .unwrap()
+        .args(["fleet-report", "--help"])
+        .assert()
+        .success()
+        .stdout(contains("local fleet rollup"))
+        .stdout(contains("not signed provenance"));
+
+    Command::cargo_bin("aibom-cli")
+        .unwrap()
+        .args(["fleet-manifest", "--help"])
+        .assert()
+        .success()
+        .stdout(contains("collector-side manifest"))
+        .stdout(contains("fixture Sigstore bundle"))
+        .stdout(contains("does not make endpoint-signed evidence"));
+}
+
 // Without the flag, verify runs schema/structural validation only and passes
 // on a fixture triplet. With the structural Sigstore-bundle pre-screen enabled,
 // the fixture bundle is deliberately rejected at the crypto-verification stage.
@@ -3148,7 +3168,7 @@ fn fleet_report_aggregates_recursive_aibom_inputs() {
     assert!(html.contains("founder-mac"));
     assert!(html.contains("linux-1"));
     assert!(html.contains("CVE-2026-0001"));
-    assert!(html.contains("Signed by"));
+    assert!(html.contains("Source AIBOM signer identities"));
     assert!(html.contains(">report</a>"));
     assert!(!html.contains("<link"));
 
@@ -3160,6 +3180,8 @@ fn fleet_report_aggregates_recursive_aibom_inputs() {
             .contains("| empty-1 | Windows / windows | 2026-05-01T12:00:00Z | 0 | 0 | 0 | 0 |  |")
     );
     assert!(markdown.contains("CVE-2026-0001"));
+    assert!(markdown.contains("## Input Signer Rollup"));
+    assert!(markdown.contains("Source AIBOM signer identities"));
 }
 
 #[test]

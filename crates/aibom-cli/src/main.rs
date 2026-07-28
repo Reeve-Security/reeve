@@ -203,6 +203,7 @@ enum Commands {
         #[arg(long)]
         sensitive_data: Option<PathBuf>,
     },
+    /// Render a local fleet rollup from endpoint AIBOM sidecars; not signed provenance.
     FleetReport {
         #[arg(long)]
         evidence_dir: PathBuf,
@@ -211,6 +212,7 @@ enum Commands {
         #[arg(long, value_enum, default_value_t = FleetReportFormat::Html)]
         format: FleetReportFormat,
     },
+    /// Create a collector-side manifest over endpoint evidence artifacts.
     FleetManifest {
         #[arg(long)]
         evidence_dir: PathBuf,
@@ -220,6 +222,7 @@ enum Commands {
         bundle: Option<PathBuf>,
         #[arg(long, default_value = "local dry run")]
         recording_scope: String,
+        /// Attaches a real or fixture Sigstore bundle to the collector-side manifest; does not make endpoint-signed evidence.
         #[arg(long, value_enum, default_value_t = SignMode::Fixture)]
         sign_mode: SignMode,
     },
@@ -2745,9 +2748,9 @@ fn render_fleet_report_markdown(report: &Value) -> String {
     markdown.push_str(&markdown_string_list(&summary["distinctPublishers"]));
     markdown.push_str("\n## Distinct CVE Matches\n\n");
     markdown.push_str(&markdown_string_list(&summary["distinctCveMatches"]));
-    markdown.push_str("\n## Provenance\n\n");
+    markdown.push_str("\n## Input Signer Rollup\n\n");
     markdown.push_str(&format!(
-        "- Generated at Unix time: {}\n- Signed by: {}\n- Total endpoints: {}\n",
+        "- Generated at Unix time: {}\n- Source AIBOM signer identities: {}\n- Total endpoints: {}\n",
         report["generatedAtUnix"].as_u64().unwrap_or(0),
         markdown_escape(&joined_strings(&summary["signedBy"])),
         summary["endpoints"].as_u64().unwrap_or(0),
@@ -2811,7 +2814,7 @@ fn render_fleet_report_html(report: &Value) -> String {
     html.push_str("<h2>Distinct CVE Matches</h2>");
     html.push_str(&render_html_string_pills(&summary["distinctCveMatches"]));
     html.push_str(&format!(
-        "<footer class=\"meta\"><p>Generated at Unix time: {}. Signed by: {}. Total endpoints: {}.</p></footer>",
+        "<footer class=\"meta\"><p>Generated at Unix time: {}. Source AIBOM signer identities: {}. Total endpoints: {}.</p></footer>",
         report["generatedAtUnix"].as_u64().unwrap_or(0),
         html_escape(&joined_strings(&summary["signedBy"])),
         summary["endpoints"].as_u64().unwrap_or(0),

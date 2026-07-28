@@ -13,8 +13,11 @@ a fleet of endpoints.
 
 Each subdirectory has its own README with platform-specific steps.
 
-The templates verify the signed surface config but do not sign scan output;
-output signing is tracked post-launch.
+The templates verify the signed surface config but schedule scans with
+`--skip-sign`, so endpoint and MDM/deploy scan output remains unsigned for
+provenance purposes. `fleet-report` is only a local rollup/report surface.
+The current fleet-signing primitive is `fleet-manifest`: a collector-side
+manifest over endpoint evidence artifacts, not endpoint-signed evidence.
 
 ## Boundary
 
