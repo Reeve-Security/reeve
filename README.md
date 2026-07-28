@@ -101,7 +101,15 @@ the single sidecar a one-endpoint scan writes; if a directory holds several,
 pass the exact file path.
 
 To roll up several scan directories into one local fleet summary, use
-`aibom-cli fleet-report --evidence-dir <dir>`.
+`aibom-cli fleet-report --evidence-dir <dir>`. `fleet-report` is a local
+rollup/report surface; it does not create signed provenance.
+
+For fleet evidence signing, use `aibom-cli fleet-manifest`. It creates the
+current collector-side manifest primitive for endpoint evidence: a manifest
+that indexes endpoint artifacts and can emit a real or fixture Sigstore bundle
+for the collector-side artifact. It is not endpoint-signed evidence. Endpoint
+and MDM/deploy template scans that use `--skip-sign` remain unsigned for
+provenance purposes.
 
 ## What Reeve emits
 
@@ -111,7 +119,7 @@ Every scan writes an output triplet:
 |---|---|
 | `<scan>.cdx.json` | CycloneDX 1.5 SBOM, for the supply-chain scanners you already run |
 | `<scan>.aibom.json` | AIBOM sidecar: typed AI-agent evidence (declared vs observed, grants, provenance). Carries Rego policy verdicts when you add `--policy-check`. |
-| `<scan>.sigstore.json` or `<scan>.sigstore.fixture.json` | Sigstore bundle for signed output, or a fixture bundle if cosign is unavailable. Use `--sign-mode real` to require real signing. |
+| `<scan>.sigstore.json` or `<scan>.sigstore.fixture.json` | Sigstore bundle for real signed output, or a deterministic fixture placeholder when real signing is disabled or unavailable. Fixture bundles are not signed provenance; use `--sign-mode real` to require real signing. |
 
 On request, never by default:
 
@@ -167,8 +175,9 @@ cosign verify-blob `
 ```
 
 **Verify scan output.** A scan writes a triplet: CycloneDX BOM, AIBOM
-sidecar, and signature bundle. For production, scan with `--sign-mode real`
-so Reeve fails if cosign is unavailable instead of emitting a fixture bundle.
+sidecar, and a real or fixture Sigstore bundle. For production, scan with
+`--sign-mode real` so Reeve fails if cosign is unavailable instead of emitting
+a fixture bundle.
 Run Reeve's structural checks, or use `cosign verify-blob` for full
 Fulcio/Rekor proof:
 
@@ -248,9 +257,11 @@ embedded at build time.
 
 **Signed releases, signable output.** Sigstore keyless signing (Fulcio +
 Rekor) covers release binaries. Scan output can be signed with the same
-mechanism; use `--sign-mode real` to require it. The scanner's own
-supply-chain integrity is in scope for its security policy, so you can
-verify what you run and what it produced.
+mechanism; use `--sign-mode real` to require it. Fixture bundles and
+`fleet-report` output are not signed provenance. `fleet-manifest` is the
+collector-side signed primitive for endpoint evidence; it must not be read as
+endpoint-signed evidence. The scanner's own supply-chain integrity is in scope
+for its security policy, so you can verify what you run and what it produced.
 
 ## Documentation
 
