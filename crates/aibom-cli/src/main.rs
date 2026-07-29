@@ -114,6 +114,20 @@ enum Commands {
         #[arg(long)]
         schema: Option<PathBuf>,
     },
+    VerifyFleetManifest {
+        #[arg(long)]
+        manifest: PathBuf,
+        #[arg(long)]
+        bundle: PathBuf,
+        /// Run Reeve's structural Sigstore-bundle checks: bundle shape,
+        /// subject facts, allowlist facts, and fixture rejection. This is a
+        /// structural pre-screen, not cryptographic verification; for full
+        /// Sigstore verification use cosign verify-blob.
+        #[arg(long, alias = "verify-crypto")]
+        verify_bundle_structure: bool,
+        #[arg(long)]
+        allowlist: Option<PathBuf>,
+    },
     Scan {
         #[arg(long)]
         target: Option<PathBuf>,
@@ -448,6 +462,12 @@ fn main() -> Result<()> {
             allowlist,
             schema,
         ),
+        Commands::VerifyFleetManifest {
+            manifest,
+            bundle,
+            verify_bundle_structure,
+            allowlist,
+        } => verify_fleet_manifest_paths(manifest, bundle, verify_bundle_structure, allowlist),
         Commands::Scan {
             target,
             adapters,
@@ -643,6 +663,29 @@ fn validate_artifact_paths(
                 failure.stage, failure.code, failure.pointer
             );
             bail!("artifact validation failed")
+        }
+    }
+}
+
+fn verify_fleet_manifest_paths(
+    manifest: PathBuf,
+    bundle: PathBuf,
+    verify_bundle_structure: bool,
+    allowlist: Option<PathBuf>,
+) -> Result<()> {
+    match verify_fleet_manifest_bundle(
+        &manifest,
+        &bundle,
+        verify_bundle_structure,
+        &read_allowlist(allowlist)?,
+    ) {
+        Ok(()) => {
+            println!("PASS fleet-manifest");
+            Ok(())
+        }
+        Err(error) => {
+            println!("FAIL fleet-manifest {error}");
+            bail!("fleet-manifest verification failed")
         }
     }
 }
@@ -1755,6 +1798,167 @@ fn verify(
         allowlist,
         schema,
     )
+}
+
+fn verify_fleet_manifest_bundle(
+    manifest_path: &Path,
+    bundle_path: &Path,
+    verify_bundle_structure: bool,
+    allowlist: &Allowlist,
+) -> Result<(), String> {
+    let manifest_bytes =
+        std::fs::read(manifest_path).map_err(|error| format!("read manifest: {error}"))?;
+    let manifest: Value = serde_json::from_slice(&manifest_bytes)
+        .map_err(|error| format!("parse manifest: {error}"))?;
+    let bundle = read_json(bundle_path).map_err(|error| format!("read bundle: {error}"))?;
+    if verify_bundle_structure {
+        aibom_signer::verify_crypto(&bundle, allowlist)
+            .map_err(|failure| format!("{} {} {}", failure.stage, failure.code, failure.pointer))?;
+    }
+
+    let payload_type = bundle
+        .pointer("/dsseEnvelope/payloadType")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "/dsseEnvelope/payloadType missing".to_string())?;
+    if payload_type != aibom_core::DSSE_PAYLOAD_TYPE {
+        return Err("/dsseEnvelope/payloadType mismatch".to_string());
+    }
+    let payload = bundle
+        .pointer("/dsseEnvelope/payload")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "/dsseEnvelope/payload missing".to_string())?;
+    let statement_bytes = BASE64_STANDARD
+        .decode(payload)
+        .map_err(|_| "/dsseEnvelope/payload decode failed".to_string())?;
+    let statement: Value = serde_json::from_slice(&statement_bytes)
+        .map_err(|_| "/dsseEnvelope/payload decode failed".to_string())?;
+    if statement.pointer("/_type").and_then(Value::as_str) != Some(IN_TOTO_STATEMENT_TYPE) {
+        return Err("/dsseEnvelope/payload[decoded]/_type mismatch".to_string());
+    }
+    if statement.pointer("/predicateType").and_then(Value::as_str)
+        != Some(FLEET_MANIFEST_PREDICATE_TYPE)
+    {
+        return Err("/dsseEnvelope/payload[decoded]/predicateType mismatch".to_string());
+    }
+
+    let expected_name = manifest_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("fleet-manifest.json");
+    let subjects = statement
+        .pointer("/subject")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "/dsseEnvelope/payload[decoded]/subject missing".to_string())?;
+    if subjects.len() != 1 {
+        return Err(
+            "/dsseEnvelope/payload[decoded]/subject must have exactly one entry".to_string(),
+        );
+    }
+    if subjects[0].pointer("/name").and_then(Value::as_str) != Some(expected_name) {
+        return Err("/dsseEnvelope/payload[decoded]/subject/0/name mismatch".to_string());
+    }
+    let expected_manifest_digest = sha256_hex(&manifest_bytes);
+    if subjects[0]
+        .pointer("/digest/sha256")
+        .and_then(Value::as_str)
+        != Some(expected_manifest_digest.as_str())
+    {
+        return Err("/dsseEnvelope/payload[decoded]/subject/0/digest/sha256 mismatch".to_string());
+    }
+
+    let roles = statement
+        .pointer("/predicate/artifactRoles")
+        .and_then(Value::as_object)
+        .ok_or_else(|| {
+            "/dsseEnvelope/payload[decoded]/predicate/artifactRoles missing".to_string()
+        })?;
+    if roles.len() != 1
+        || roles.get(expected_name).and_then(Value::as_str) != Some("fleet-manifest")
+    {
+        return Err("/dsseEnvelope/payload[decoded]/predicate/artifactRoles mismatch".to_string());
+    }
+
+    if manifest.get("kind").and_then(Value::as_str) != Some("reeve-fleet-manifest") {
+        return Err(if manifest.get("kind").is_some() {
+            "/kind mismatch".to_string()
+        } else {
+            "/kind missing".to_string()
+        });
+    }
+    let schema_version = manifest
+        .get("schemaVersion")
+        .ok_or_else(|| "/schemaVersion missing".to_string())?;
+    if statement.pointer("/predicate/schemaVersion") != Some(schema_version) {
+        return Err("/dsseEnvelope/payload[decoded]/predicate/schemaVersion mismatch".to_string());
+    }
+    let recording_scope = manifest
+        .get("recordingScope")
+        .ok_or_else(|| "/recordingScope missing".to_string())?;
+    if statement.pointer("/predicate/recordingScope") != Some(recording_scope) {
+        return Err("/dsseEnvelope/payload[decoded]/predicate/recordingScope mismatch".to_string());
+    }
+    let generated_at_unix = manifest
+        .get("generatedAtUnix")
+        .ok_or_else(|| "/generatedAtUnix missing".to_string())?;
+    if statement.pointer("/predicate/generatedAtUnix") != Some(generated_at_unix) {
+        return Err(
+            "/dsseEnvelope/payload[decoded]/predicate/generatedAtUnix mismatch".to_string(),
+        );
+    }
+    let summary = manifest
+        .get("summary")
+        .ok_or_else(|| "/summary missing".to_string())?;
+    if statement.pointer("/predicate/summary") != Some(summary) {
+        return Err("/dsseEnvelope/payload[decoded]/predicate/summary mismatch".to_string());
+    }
+
+    let endpoints = manifest
+        .get("endpoints")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "/endpoints missing or not array".to_string())?;
+    let mut expected_scan_ids_by_endpoint = serde_json::Map::new();
+    for (endpoint_index, endpoint) in endpoints.iter().enumerate() {
+        let endpoint_id = endpoint
+            .get("endpointId")
+            .and_then(Value::as_str)
+            .ok_or_else(|| format!("/endpoints/{endpoint_index}/endpointId missing"))?;
+        let scan_ids = endpoint
+            .get("scanIds")
+            .ok_or_else(|| format!("/endpoints/{endpoint_index}/scanIds missing"))?;
+        if !scan_ids.is_array() {
+            return Err(format!("/endpoints/{endpoint_index}/scanIds must be array"));
+        }
+        if expected_scan_ids_by_endpoint
+            .insert(endpoint_id.to_string(), scan_ids.clone())
+            .is_some()
+        {
+            return Err(format!("/endpoints/{endpoint_index}/endpointId duplicate"));
+        }
+    }
+    if statement.pointer("/predicate/scanIdsByEndpoint")
+        != Some(&Value::Object(expected_scan_ids_by_endpoint))
+    {
+        return Err(
+            "/dsseEnvelope/payload[decoded]/predicate/scanIdsByEndpoint mismatch".to_string(),
+        );
+    }
+
+    let artifact_set = Value::Array(endpoints.clone());
+    let artifact_set_bytes = canonicalize_json(&artifact_set)
+        .map_err(|error| format!("canonicalize manifest endpoints: {error}"))?;
+    let expected_artifact_digest = sha256_hex(&artifact_set_bytes);
+    if statement
+        .pointer("/predicate/recordedArtifactsDigest/sha256")
+        .and_then(Value::as_str)
+        != Some(expected_artifact_digest.as_str())
+    {
+        return Err(
+            "/dsseEnvelope/payload[decoded]/predicate/recordedArtifactsDigest/sha256 mismatch"
+                .to_string(),
+        );
+    }
+
+    Ok(())
 }
 
 fn report(

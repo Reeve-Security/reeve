@@ -835,6 +835,15 @@ fn fleet_help_describes_current_signing_boundary() {
         .stdout(contains("collector-side manifest"))
         .stdout(contains("fixture Sigstore bundle"))
         .stdout(contains("does not make endpoint-signed evidence"));
+
+    Command::cargo_bin("aibom-cli")
+        .unwrap()
+        .args(["verify-fleet-manifest", "--help"])
+        .assert()
+        .success()
+        .stdout(contains("structural Sigstore-bundle checks"))
+        .stdout(contains("--manifest"))
+        .stdout(contains("--bundle"));
 }
 
 // Without the flag, verify runs schema/structural validation only and passes
@@ -3184,8 +3193,7 @@ fn fleet_report_aggregates_recursive_aibom_inputs() {
     assert!(markdown.contains("Source AIBOM signer identities"));
 }
 
-#[test]
-fn fleet_manifest_indexes_and_fixture_signs_endpoint_artifacts() {
+fn build_fixture_fleet_manifest() -> (TempDir, PathBuf, PathBuf) {
     let root = TempDir::new().unwrap();
     let evidence = root.path().join("evidence");
     let endpoint = evidence.join("endpoints").join("eng-linux-02");
@@ -3230,6 +3238,14 @@ fn fleet_manifest_indexes_and_fixture_signs_endpoint_artifacts() {
         .success()
         .stdout(contains("fleet-manifest "))
         .stdout(contains("bundle "));
+
+    (root, manifest_path, bundle_path)
+}
+
+#[test]
+fn fleet_manifest_indexes_and_fixture_signs_endpoint_artifacts() {
+    let (_root, manifest_path, bundle_path) = build_fixture_fleet_manifest();
+    let aibom_bytes = br#"{"aibom":{"scan":{"scanId":"eng-linux-02"}}}"#;
 
     let manifest = common::read_json(&manifest_path);
     assert_eq!(manifest["kind"], "reeve-fleet-manifest");
@@ -3294,6 +3310,123 @@ fn fleet_manifest_indexes_and_fixture_signs_endpoint_artifacts() {
         statement["subject"][0]["digest"]["sha256"],
         json!(sha256_hex(&fs::read(&manifest_path).unwrap()))
     );
+}
+
+#[test]
+fn verify_fleet_manifest_passes_without_structural_bundle_flag() {
+    let (_root, manifest_path, bundle_path) = build_fixture_fleet_manifest();
+
+    Command::cargo_bin("aibom-cli")
+        .unwrap()
+        .args([
+            "verify-fleet-manifest",
+            "--manifest",
+            manifest_path.to_str().unwrap(),
+            "--bundle",
+            bundle_path.to_str().unwrap(),
+        ])
+        .assert()
+        .success()
+        .stdout(contains("PASS fleet-manifest"));
+}
+
+#[test]
+fn verify_fleet_manifest_bundle_structure_flag_rejects_fixture_bundle() {
+    let (_root, manifest_path, bundle_path) = build_fixture_fleet_manifest();
+
+    Command::cargo_bin("aibom-cli")
+        .unwrap()
+        .args([
+            "verify-fleet-manifest",
+            "--manifest",
+            manifest_path.to_str().unwrap(),
+            "--bundle",
+            bundle_path.to_str().unwrap(),
+            "--verify-bundle-structure",
+        ])
+        .assert()
+        .failure()
+        .stdout(contains(
+            "FAIL fleet-manifest crypto-verification crypto.fulcio_chain_untrusted",
+        ));
+}
+
+#[test]
+fn verify_fleet_manifest_rejects_recorded_artifact_digest_drift() {
+    let (_root, manifest_path, bundle_path) = build_fixture_fleet_manifest();
+    let mut bundle = common::read_json(&bundle_path);
+    let payload = bundle["dsseEnvelope"]["payload"].as_str().unwrap();
+    let statement_bytes = BASE64_STANDARD.decode(payload).unwrap();
+    let mut statement: serde_json::Value = serde_json::from_slice(&statement_bytes).unwrap();
+    statement["predicate"]["recordedArtifactsDigest"]["sha256"] = json!("deadbeef");
+    bundle["dsseEnvelope"]["payload"] =
+        json!(BASE64_STANDARD.encode(serde_json::to_vec(&statement).unwrap()));
+    fs::write(&bundle_path, serde_json::to_vec_pretty(&bundle).unwrap()).unwrap();
+
+    Command::cargo_bin("aibom-cli")
+        .unwrap()
+        .args([
+            "verify-fleet-manifest",
+            "--manifest",
+            manifest_path.to_str().unwrap(),
+            "--bundle",
+            bundle_path.to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stdout(contains(
+            "FAIL fleet-manifest /dsseEnvelope/payload[decoded]/predicate/recordedArtifactsDigest/sha256 mismatch",
+        ));
+}
+
+#[test]
+fn verify_fleet_manifest_rejects_manifest_missing_required_fields() {
+    let root = TempDir::new().unwrap();
+    let manifest_path = root.path().join("fleet-manifest.json");
+    let bundle_path = root.path().join("fleet-manifest.sigstore.fixture.json");
+    fs::write(&manifest_path, b"{}").unwrap();
+
+    let statement = json!({
+        "_type": "https://in-toto.io/Statement/v1",
+        "predicateType": "https://aibom.example/attestation/fleet-manifest/v0.1",
+        "subject": [{
+            "name": "fleet-manifest.json",
+            "digest": {"sha256": sha256_hex(&fs::read(&manifest_path).unwrap())}
+        }],
+        "predicate": {
+            "artifactRoles": {"fleet-manifest.json": "fleet-manifest"},
+            "schemaVersion": "0.1.0",
+            "recordedArtifactsDigest": {
+                "sha256": sha256_hex(&canonicalize_json(&json!([])).unwrap())
+            },
+            "scanIdsByEndpoint": {}
+        }
+    });
+    let bundle = json!({
+        "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+        "verificationMaterial": {
+            "certificate": {"rawBytes": "x"}
+        },
+        "dsseEnvelope": {
+            "payloadType": "application/vnd.in-toto+json",
+            "payload": BASE64_STANDARD.encode(serde_json::to_vec(&statement).unwrap()),
+            "signatures": [{"sig": "x"}]
+        }
+    });
+    fs::write(&bundle_path, serde_json::to_vec_pretty(&bundle).unwrap()).unwrap();
+
+    Command::cargo_bin("aibom-cli")
+        .unwrap()
+        .args([
+            "verify-fleet-manifest",
+            "--manifest",
+            manifest_path.to_str().unwrap(),
+            "--bundle",
+            bundle_path.to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stdout(contains("FAIL fleet-manifest /kind missing"));
 }
 
 #[test]
