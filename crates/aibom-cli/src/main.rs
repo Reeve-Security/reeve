@@ -1872,13 +1872,13 @@ fn build_fleet_manifest(evidence_dir: &Path, recording_scope: &str) -> Result<Va
             .with_context(|| format!("classify endpoint artifact {}", path.display()))?;
         *role_counts.entry(role.to_string()).or_default() += 1;
         let endpoint_id = fleet_endpoint_id(evidence_dir, &path);
-        if role == "aibom-sidecar" {
-            if let Some(scan_id) = fleet_aibom_scan_id(&bytes) {
-                scan_ids_by_endpoint
-                    .entry(endpoint_id.clone())
-                    .or_default()
-                    .insert(scan_id);
-            }
+        if role == "aibom-sidecar"
+            && let Some(scan_id) = fleet_aibom_scan_id(&bytes)
+        {
+            scan_ids_by_endpoint
+                .entry(endpoint_id.clone())
+                .or_default()
+                .insert(scan_id);
         }
         let rel_path = relative_slash_path(evidence_dir, &path)?;
         by_endpoint.entry(endpoint_id).or_default().push(json!({
