@@ -1878,39 +1878,63 @@ fn verify_fleet_manifest_bundle(
         return Err("/dsseEnvelope/payload[decoded]/predicate/artifactRoles mismatch".to_string());
     }
 
+    if manifest.get("kind").and_then(Value::as_str) != Some("reeve-fleet-manifest") {
+        return Err(if manifest.get("kind").is_some() {
+            "/kind mismatch".to_string()
+        } else {
+            "/kind missing".to_string()
+        });
+    }
     let schema_version = manifest
         .get("schemaVersion")
-        .cloned()
-        .unwrap_or_else(|| json!("0.1.0"));
-    if statement.pointer("/predicate/schemaVersion") != Some(&schema_version) {
+        .ok_or_else(|| "/schemaVersion missing".to_string())?;
+    if statement.pointer("/predicate/schemaVersion") != Some(schema_version) {
         return Err("/dsseEnvelope/payload[decoded]/predicate/schemaVersion mismatch".to_string());
     }
-    if statement.pointer("/predicate/recordingScope") != manifest.get("recordingScope") {
+    let recording_scope = manifest
+        .get("recordingScope")
+        .ok_or_else(|| "/recordingScope missing".to_string())?;
+    if statement.pointer("/predicate/recordingScope") != Some(recording_scope) {
         return Err("/dsseEnvelope/payload[decoded]/predicate/recordingScope mismatch".to_string());
     }
-    if statement.pointer("/predicate/generatedAtUnix") != manifest.get("generatedAtUnix") {
+    let generated_at_unix = manifest
+        .get("generatedAtUnix")
+        .ok_or_else(|| "/generatedAtUnix missing".to_string())?;
+    if statement.pointer("/predicate/generatedAtUnix") != Some(generated_at_unix) {
         return Err(
             "/dsseEnvelope/payload[decoded]/predicate/generatedAtUnix mismatch".to_string(),
         );
     }
-    if statement.pointer("/predicate/summary") != manifest.get("summary") {
+    let summary = manifest
+        .get("summary")
+        .ok_or_else(|| "/summary missing".to_string())?;
+    if statement.pointer("/predicate/summary") != Some(summary) {
         return Err("/dsseEnvelope/payload[decoded]/predicate/summary mismatch".to_string());
     }
 
-    let expected_scan_ids_by_endpoint = manifest
+    let endpoints = manifest
         .get("endpoints")
         .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|endpoint| {
-            let endpoint_id = endpoint.get("endpointId").and_then(Value::as_str)?;
-            let scan_ids = endpoint
-                .get("scanIds")
-                .cloned()
-                .unwrap_or_else(|| json!([]));
-            Some((endpoint_id.to_string(), scan_ids))
-        })
-        .collect::<serde_json::Map<String, Value>>();
+        .ok_or_else(|| "/endpoints missing or not array".to_string())?;
+    let mut expected_scan_ids_by_endpoint = serde_json::Map::new();
+    for (endpoint_index, endpoint) in endpoints.iter().enumerate() {
+        let endpoint_id = endpoint
+            .get("endpointId")
+            .and_then(Value::as_str)
+            .ok_or_else(|| format!("/endpoints/{endpoint_index}/endpointId missing"))?;
+        let scan_ids = endpoint
+            .get("scanIds")
+            .ok_or_else(|| format!("/endpoints/{endpoint_index}/scanIds missing"))?;
+        if !scan_ids.is_array() {
+            return Err(format!("/endpoints/{endpoint_index}/scanIds must be array"));
+        }
+        if expected_scan_ids_by_endpoint
+            .insert(endpoint_id.to_string(), scan_ids.clone())
+            .is_some()
+        {
+            return Err(format!("/endpoints/{endpoint_index}/endpointId duplicate"));
+        }
+    }
     if statement.pointer("/predicate/scanIdsByEndpoint")
         != Some(&Value::Object(expected_scan_ids_by_endpoint))
     {
@@ -1919,10 +1943,7 @@ fn verify_fleet_manifest_bundle(
         );
     }
 
-    let artifact_set = manifest
-        .get("endpoints")
-        .cloned()
-        .unwrap_or_else(|| Value::Array(Vec::new()));
+    let artifact_set = Value::Array(endpoints.clone());
     let artifact_set_bytes = canonicalize_json(&artifact_set)
         .map_err(|error| format!("canonicalize manifest endpoints: {error}"))?;
     let expected_artifact_digest = sha256_hex(&artifact_set_bytes);

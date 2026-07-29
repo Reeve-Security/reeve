@@ -3380,6 +3380,56 @@ fn verify_fleet_manifest_rejects_recorded_artifact_digest_drift() {
 }
 
 #[test]
+fn verify_fleet_manifest_rejects_manifest_missing_required_fields() {
+    let root = TempDir::new().unwrap();
+    let manifest_path = root.path().join("fleet-manifest.json");
+    let bundle_path = root.path().join("fleet-manifest.sigstore.fixture.json");
+    fs::write(&manifest_path, b"{}").unwrap();
+
+    let statement = json!({
+        "_type": "https://in-toto.io/Statement/v1",
+        "predicateType": "https://aibom.example/attestation/fleet-manifest/v0.1",
+        "subject": [{
+            "name": "fleet-manifest.json",
+            "digest": {"sha256": sha256_hex(&fs::read(&manifest_path).unwrap())}
+        }],
+        "predicate": {
+            "artifactRoles": {"fleet-manifest.json": "fleet-manifest"},
+            "schemaVersion": "0.1.0",
+            "recordedArtifactsDigest": {
+                "sha256": sha256_hex(&canonicalize_json(&json!([])).unwrap())
+            },
+            "scanIdsByEndpoint": {}
+        }
+    });
+    let bundle = json!({
+        "mediaType": "application/vnd.dev.sigstore.bundle.v0.3+json",
+        "verificationMaterial": {
+            "certificate": {"rawBytes": "x"}
+        },
+        "dsseEnvelope": {
+            "payloadType": "application/vnd.in-toto+json",
+            "payload": BASE64_STANDARD.encode(serde_json::to_vec(&statement).unwrap()),
+            "signatures": [{"sig": "x"}]
+        }
+    });
+    fs::write(&bundle_path, serde_json::to_vec_pretty(&bundle).unwrap()).unwrap();
+
+    Command::cargo_bin("aibom-cli")
+        .unwrap()
+        .args([
+            "verify-fleet-manifest",
+            "--manifest",
+            manifest_path.to_str().unwrap(),
+            "--bundle",
+            bundle_path.to_str().unwrap(),
+        ])
+        .assert()
+        .failure()
+        .stdout(contains("FAIL fleet-manifest /kind missing"));
+}
+
+#[test]
 fn mcp_registry_seed_normalizes_dedupes_and_fixture_signs() {
     let root = TempDir::new().unwrap();
     let input = common::repo_root()
