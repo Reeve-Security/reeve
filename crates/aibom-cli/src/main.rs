@@ -1837,7 +1837,7 @@ fn fleet_manifest(
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("fleet-manifest.json");
-    let statement = build_fleet_manifest_statement(subject_name, &manifest_bytes);
+    let statement = build_fleet_manifest_statement(subject_name, &manifest, &manifest_bytes)?;
     if sign_real {
         OnlineSigstoreSigner::from_env()?.sign_statement_to_bundle(
             &statement,
@@ -1863,6 +1863,7 @@ fn build_fleet_manifest(evidence_dir: &Path, recording_scope: &str) -> Result<Va
     }
 
     let mut by_endpoint = BTreeMap::<String, Vec<Value>>::new();
+    let mut scan_ids_by_endpoint = BTreeMap::<String, BTreeSet<String>>::new();
     let mut role_counts = BTreeMap::<String, usize>::new();
     for path in artifacts {
         let bytes = std::fs::read(&path)
@@ -1871,6 +1872,14 @@ fn build_fleet_manifest(evidence_dir: &Path, recording_scope: &str) -> Result<Va
             .with_context(|| format!("classify endpoint artifact {}", path.display()))?;
         *role_counts.entry(role.to_string()).or_default() += 1;
         let endpoint_id = fleet_endpoint_id(evidence_dir, &path);
+        if role == "aibom-sidecar"
+            && let Some(scan_id) = fleet_aibom_scan_id(&bytes)
+        {
+            scan_ids_by_endpoint
+                .entry(endpoint_id.clone())
+                .or_default()
+                .insert(scan_id);
+        }
         let rel_path = relative_slash_path(evidence_dir, &path)?;
         by_endpoint.entry(endpoint_id).or_default().push(json!({
             "path": rel_path,
@@ -1884,9 +1893,15 @@ fn build_fleet_manifest(evidence_dir: &Path, recording_scope: &str) -> Result<Va
     let endpoints = by_endpoint
         .into_iter()
         .map(|(endpoint_id, artifacts)| {
+            let scan_ids = scan_ids_by_endpoint
+                .remove(&endpoint_id)
+                .unwrap_or_default()
+                .into_iter()
+                .collect::<Vec<_>>();
             json!({
                 "endpointId": endpoint_id,
                 "artifactCount": artifacts.len(),
+                "scanIds": scan_ids,
                 "artifacts": artifacts
             })
         })
@@ -1911,10 +1926,33 @@ fn build_fleet_manifest(evidence_dir: &Path, recording_scope: &str) -> Result<Va
     }))
 }
 
-fn build_fleet_manifest_statement(subject_name: &str, manifest_bytes: &[u8]) -> Value {
+fn build_fleet_manifest_statement(
+    subject_name: &str,
+    manifest: &Value,
+    manifest_bytes: &[u8],
+) -> Result<Value> {
+    let artifact_set = manifest
+        .get("endpoints")
+        .cloned()
+        .unwrap_or_else(|| Value::Array(Vec::new()));
+    let artifact_set_bytes = canonicalize_json(&artifact_set)?;
+    let scan_ids_by_endpoint = manifest
+        .get("endpoints")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|endpoint| {
+            let endpoint_id = endpoint.get("endpointId").and_then(Value::as_str)?;
+            let scan_ids = endpoint
+                .get("scanIds")
+                .cloned()
+                .unwrap_or_else(|| json!([]));
+            Some((endpoint_id.to_string(), scan_ids))
+        })
+        .collect::<serde_json::Map<String, Value>>();
     let mut artifact_roles = serde_json::Map::new();
     artifact_roles.insert(subject_name.to_string(), json!("fleet-manifest"));
-    json!({
+    Ok(json!({
         "_type": IN_TOTO_STATEMENT_TYPE,
         "predicateType": FLEET_MANIFEST_PREDICATE_TYPE,
         "subject": [{
@@ -1924,9 +1962,16 @@ fn build_fleet_manifest_statement(subject_name: &str, manifest_bytes: &[u8]) -> 
         "predicate": {
             "artifactRoles": artifact_roles,
             "canonicalization": "JSON-pretty+stable-artifact-order-v0.1",
-            "schemaVersion": "0.1.0"
+            "schemaVersion": "0.1.0",
+            "recordingScope": manifest["recordingScope"].clone(),
+            "generatedAtUnix": manifest["generatedAtUnix"].clone(),
+            "summary": manifest["summary"].clone(),
+            "recordedArtifactsDigest": {
+                "sha256": sha256_hex(&artifact_set_bytes)
+            },
+            "scanIdsByEndpoint": scan_ids_by_endpoint
         }
-    })
+    }))
 }
 
 fn default_fleet_manifest_bundle_path(output: &Path, sign_real: bool) -> PathBuf {
@@ -2260,6 +2305,15 @@ fn fleet_endpoint_id(root: &Path, artifact_path: &Path) -> String {
         .and_then(|name| name.to_str())
         .unwrap_or("unknown")
         .to_string()
+}
+
+fn fleet_aibom_scan_id(bytes: &[u8]) -> Option<String> {
+    let value: Value = serde_json::from_slice(bytes).ok()?;
+    value
+        .pointer("/aibom/scan/scanId")
+        .and_then(Value::as_str)
+        .filter(|scan_id| !scan_id.is_empty())
+        .map(ToString::to_string)
 }
 
 fn relative_slash_path(root: &Path, path: &Path) -> Result<String> {

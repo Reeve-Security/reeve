@@ -1,7 +1,7 @@
 #[allow(dead_code)]
 mod common;
 
-use aibom_core::sha256_hex;
+use aibom_core::{canonicalize_json, sha256_hex};
 use assert_cmd::Command;
 use base64::prelude::*;
 use predicates::prelude::PredicateBooleanExt;
@@ -3244,6 +3244,7 @@ fn fleet_manifest_indexes_and_fixture_signs_endpoint_artifacts() {
         manifest["endpoints"][0]["endpointId"],
         json!("eng-linux-02")
     );
+    assert_eq!(manifest["endpoints"][0]["scanIds"], json!(["eng-linux-02"]));
     let artifacts = manifest["endpoints"][0]["artifacts"].as_array().unwrap();
     assert!(artifacts.iter().any(|artifact| {
         artifact["path"] == "endpoints/eng-linux-02/scan-test.aibom.json"
@@ -3270,6 +3271,24 @@ fn fleet_manifest_indexes_and_fixture_signs_endpoint_artifacts() {
     assert_eq!(
         statement["predicate"]["artifactRoles"]["fleet-manifest.json"],
         json!("fleet-manifest")
+    );
+    assert_eq!(
+        statement["predicate"]["recordingScope"],
+        json!("local test")
+    );
+    assert_eq!(
+        statement["predicate"]["generatedAtUnix"],
+        manifest["generatedAtUnix"]
+    );
+    assert_eq!(statement["predicate"]["summary"], manifest["summary"]);
+    assert_eq!(
+        statement["predicate"]["scanIdsByEndpoint"]["eng-linux-02"],
+        json!(["eng-linux-02"])
+    );
+    let artifact_set_bytes = canonicalize_json(&manifest["endpoints"]).unwrap();
+    assert_eq!(
+        statement["predicate"]["recordedArtifactsDigest"]["sha256"],
+        json!(sha256_hex(&artifact_set_bytes))
     );
     assert_eq!(
         statement["subject"][0]["digest"]["sha256"],
