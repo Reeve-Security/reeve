@@ -265,7 +265,7 @@ for its security policy, so you can verify what you run and what it produced.
 
 ## Documentation
 
-- [AIBOM schema spec](schema/SPEC.md) · [Policy catalog](policies/README.md)
+- [AIBOM schema spec](schema/SPEC.md) | [Policy catalog](policies/README.md) | [Fleet evidence signing model](docs/adr/0001-fleet-evidence-signing-model.md)
 
 ## License
 
